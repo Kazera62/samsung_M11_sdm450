@@ -33,8 +33,6 @@
 #include <linux/uuid.h>
 #include <net/addrconf.h>
 #include <linux/siphash.h>
-#include <linux/random.h>
-#include <linux/notifier.h>
 #include <linux/compiler.h>
 #ifdef CONFIG_BLOCK
 #include <linux/blkdev.h>
@@ -1541,8 +1539,7 @@ char *pointer_string(char *buf, char *end, const void *ptr,
 static bool have_filled_random_ptr_key __read_mostly;
 static siphash_key_t ptr_key __read_mostly;
 
-static int fill_random_ptr_key(struct notifier_block *nb,
-			       unsigned long action, void *data)
+static void fill_random_ptr_key(struct random_ready_callback *unused)
 {
 	get_random_bytes(&ptr_key, sizeof(ptr_key));
 	/*
@@ -1552,21 +1549,20 @@ static int fill_random_ptr_key(struct notifier_block *nb,
 	 */
 	smp_mb();
 	WRITE_ONCE(have_filled_random_ptr_key, true);
-	return 0;
 }
 
-static struct notifier_block random_ready = {
-	.notifier_call = fill_random_ptr_key
+static struct random_ready_callback random_ready = {
+	.func = fill_random_ptr_key
 };
 
 static int __init initialize_ptr_random(void)
 {
-	int ret = register_random_ready_notifier(&random_ready);
+	int ret = add_random_ready_callback(&random_ready);
 
 	if (!ret) {
 		return 0;
 	} else if (ret == -EALREADY) {
-		fill_random_ptr_key(&random_ready, 0, NULL);
+		fill_random_ptr_key(&random_ready);
 		return 0;
 	}
 
