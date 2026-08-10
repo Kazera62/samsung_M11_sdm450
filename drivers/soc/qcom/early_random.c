@@ -14,6 +14,7 @@
 
 #include <linux/kernel.h>
 #include <linux/hw_random.h>
+#include <linux/random.h>
 #include <linux/io.h>
 
 #include <soc/qcom/scm.h>
@@ -67,8 +68,28 @@ void __init init_random_pool(void)
 						RANDOM_BUFFER_SIZE);
 		bytes_received = (bytes_received <= RANDOM_BUFFER_SIZE) ?
 					bytes_received : RANDOM_BUFFER_SIZE;
-		add_hwgenerator_randomness(random_buffer, bytes_received,
-					   bytes_received << 3);
+		/*
+		 * This runs from setup_arch(), i.e. before the scheduler and
+		 * timers exist. The modern (v4.9.320+) random core made
+		 * add_hwgenerator_randomness() throttle itself once the crng is
+		 * ready:
+		 *
+		 *	if (!kthread_should_stop() && crng_ready())
+		 *		schedule_timeout_interruptible(CRNG_RESEED_INTERVAL);
+		 *
+		 * The 512 bytes we just read credit 4096 bits (>= POOL_READY_BITS),
+		 * which makes crng_ready() true synchronously inside the credit,
+		 * so that tail would try to sleep this early and hangs the boot
+		 * (the pre-.320 hwrng helper had no such tail, which is why the
+		 * nornd/.319 kernel boots). Feed the TrustZone PRNG seed through
+		 * add_bootloader_randomness() instead: it does the same
+		 * mix_pool_bytes() + credit_init_bits(len*8) (crediting the same
+		 * bytes_received*8 bits) with no kthread/sleep tail, so the crng
+		 * is made ready in place from trusted hardware entropy before any
+		 * consumer can block in wait_for_random_bytes(). Crediting is
+		 * gated on CONFIG_RANDOM_TRUST_BOOTLOADER=y (set in the defconfig).
+		 */
+		add_bootloader_randomness(random_buffer, bytes_received);
 	}
 }
 
