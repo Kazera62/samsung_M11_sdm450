@@ -95,7 +95,7 @@ jobs:
               CLANG_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/tags/android-11.0.0_r48/clang-r407598.tar.gz"
               ;;
             r416183b)
-              CLANG_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/tags/android-12.0.0_r1/clang-r416183b.tar.gz"
+              CLANG_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android-s-beta-4/clang-r416183b.tar.gz"
               ;;
             *)
               echo "::error::Unsupported Clang revision: $CLANG_VERSION"
