@@ -18,7 +18,7 @@ env:
   DEVICE_CODENAME: "m11q"
 
   CUSTOM_CMDS: "CLANG_TRIPLE=aarch64-linux-gnu-"
-  EXTRA_CMDS: "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/clang-custom/lib64"
+  EXTRA_CMDS: "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/clang-custom/lib64 DTC_EXT=$GITHUB_WORKSPACE/device_kernel/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y"
 
   KERNEL_SOURCE: "https://github.com/Kazera62/samsung_M11_sdm450.git"
   KERNEL_BRANCH: "${{ github.ref_name }}"
