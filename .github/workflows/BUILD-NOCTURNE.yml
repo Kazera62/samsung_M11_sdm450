@@ -1,8 +1,33 @@
 name: NOCTURNE // SDM450 Kernel Build
-run-name: "NOCTURNE | M11/A11 | ReSukiSU + SUSFS"
+run-name: "NOCTURNE | ${{ inputs.clang_profile }} | Telegram: ${{ inputs.telegram_delivery }}"
 
 on:
   workflow_dispatch:
+    inputs:
+      clang_profile:
+        description: "Select the Clang toolchain"
+        required: true
+        type: choice
+        default: lineage-r416183b
+        options:
+          - lineage-r416183b
+          - proton-clang
+      patch_diagnostics:
+        description: "Stop on incompatible SUSFS patch conflicts and report rejected hunks"
+        required: true
+        type: choice
+        default: enabled
+        options:
+          - enabled
+          - disabled
+      telegram_delivery:
+        description: "Send the completed AnyKernel3 ZIP to Telegram"
+        required: true
+        type: choice
+        default: send
+        options:
+          - send
+          - skip
 
 permissions:
   contents: read
@@ -11,8 +36,8 @@ concurrency:
   group: nocturne-build-${{ github.ref }}
   cancel-in-progress: true
 
-# This workflow consumes the latest mainline build framework on every run.
-# Kernel source is cloned from the branch selected in the Actions UI.
+# Latest upstream NonGKI build framework is checked out for each run.
+# Kernel source is built from the branch selected in the Actions UI.
 env:
   DEVICE_NAME: "samsung_m11"
   DEVICE_CODENAME: "m11q"
@@ -23,9 +48,10 @@ env:
   KERNEL_SOURCE: "https://github.com/Kazera62/samsung_M11_sdm450.git"
   KERNEL_BRANCH: "${{ github.ref_name }}"
 
-  # Toolchains based on the working Linux 4.9 example in the upstream builder.
-  CLANG_SOURCE: "https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b.git"
-  CLANG_BRANCH: "lineage-20.0"
+  # Known reference toolchain for this Linux 4.9 family.
+  # The alternative is available as a selectable experimental preset.
+  CLANG_SOURCE: "${{ inputs.clang_profile == 'proton-clang' && 'https://github.com/kdrag0n/proton-clang.git' || 'https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b.git' }}"
+  CLANG_BRANCH: "${{ inputs.clang_profile == 'proton-clang' && 'master' || 'lineage-20.0' }}"
 
   GCC_GNU: "false"
   GCC_64_SOURCE: "https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git"
@@ -38,8 +64,8 @@ env:
   DEFCONFIG_ORIGIN_IMAGE: ""
   DEFCONFIG_FROM_BOOT: "false"
 
-  # Upstream builder's SUSFS-capable ReSukiSU/BakaSU integration route.
-  # The upstream template identifies this selection as "bakasu".
+  # Upstream builder's SUSFS-capable automatic root integration.
+  # Its current selector is "bakasu" (BakaSU / ReSukiSU lineage).
   KERNELSU_SOURCE: ""
   KERNELSU_BRANCH: ""
   KERNELSU_AUTO_GET: "true"
@@ -47,15 +73,15 @@ env:
   KERNELSU_METHOD: "shell"
 
   SUSFS_ENABLE: "true"
-  # Use the upstream generic kernel-version patch first; no device-specific
-  # fixed patch currently exists in this repository for the M11/SDM450 tree.
   SUSFS_FIXED: "false"
   SUSFS_FOLDER_FIXED: ""
   SUSFS_PATCH_FIXED: ""
   PATCHES_SOURCE: ""
   PATCHES_BRANCH: ""
 
-  AK3_SOURCE: "https://github.com/osm0sis/AnyKernel3.git"
+  # Use Kazera's own AnyKernel3 fork; patch device-specific installer
+  # settings in the temporary runner before packaging.
+  AK3_SOURCE: "https://github.com/Kazera62/AnyKernel3.git"
   AK3_BRANCH: "master"
   PACK_METHOD: "AnyKernel3"
   PACK_KMODULES: "false"
@@ -82,7 +108,7 @@ env:
   BASEBAND_GUARD_ENABLE: "false"
   BASEBAND_GUARD_BOOT: "false"
 
-  BUILD_DEBUGGER: "true"
+  BUILD_DEBUGGER: "${{ inputs.patch_diagnostics == 'enabled' && 'true' || 'false' }}"
   SKIP_PATCH: "false"
 
   BUILD_OTHER_CONFIG: "false"
@@ -115,13 +141,72 @@ jobs:
       - name: Fetch toolchains and build dependencies
         uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/build-ready
 
+      - name: Configure AnyKernel3 for Samsung M11 / A11
+        shell: bash
+        run: |
+          set -euo pipefail
+          AK="$GITHUB_WORKSPACE/device_kernel/AnyKernel3/anykernel.sh"
+          test -s "$AK" || {
+            echo "::error::AnyKernel3 installer was not found at $AK"
+            exit 1
+          }
+
+          python3 - "$AK" <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          path = Path(sys.argv[1])
+          text = path.read_text()
+
+          if "# init.rc" not in text or "write_boot;" not in text:
+              raise SystemExit("Unexpected anykernel.sh layout; refusing to patch it blindly.")
+
+          # Remove the inherited Galaxy Nexus/tuna-specific ramdisk edits.
+          lines = text.splitlines()
+          result = []
+          removing_tuna_edits = False
+          found_write_boot = False
+
+          for line in lines:
+              if line.strip() == "# init.rc":
+                  removing_tuna_edits = True
+                  continue
+              if removing_tuna_edits and line.strip().startswith("write_boot;"):
+                  removing_tuna_edits = False
+                  found_write_boot = True
+                  result.append("write_boot; # install kernel image and required partitions")
+                  continue
+              if not removing_tuna_edits:
+                  result.append(line)
+
+          if removing_tuna_edits or not found_write_boot:
+              raise SystemExit("Could not safely strip the old tuna-specific installer section.")
+
+          text = "\n".join(result) + "\n"
+          text = re.sub(r"(?m)^kernel\.string=.*$", "kernel.string=NOCTURNE // SDM450", text)
+          text, block_count = re.subn(r"(?m)^BLOCK=.*$", "BLOCK=boot;", text)
+          if block_count != 1:
+              raise SystemExit(f"Expected one BLOCK assignment, found {block_count}.")
+
+          required = ("device.name1=m11q", "device.name2=m11", "device.name4=a11q", "BLOCK=boot;")
+          missing = [item for item in required if item not in text]
+          if missing:
+              raise SystemExit("Required Samsung installer entries are missing: " + ", ".join(missing))
+
+          path.write_text(text)
+          print("Configured AnyKernel3 for Samsung M11/A11; removed inherited tuna-specific edits.")
+          PY
+
+          grep -nE 'kernel.string=|device.name[0-9]+=|^BLOCK=|^IS_SLOT_DEVICE=' "$AK"
+
       - name: Apply SUSFS kernel patches
         uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/patch-susfs
 
       - name: Apply no-kprobe compatibility patch
         uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/patch-no-kprobe
 
-      - name: Device-specific build adjustments
+      - name: Device-specific build validation
         shell: bash
         run: |
           set -euo pipefail
@@ -130,8 +215,10 @@ jobs:
           echo "Defconfig: $DEFCONFIG_NAME"
           echo "KernelSU selector: $KERNELSU_AUTO_FORK"
           echo "SUSFS: $SUSFS_ENABLE"
+          echo "Clang profile: ${{ inputs.clang_profile }}"
           echo "Upstream builder: $(git -C "$GITHUB_WORKSPACE/NonGKI_Kernel_Build_2nd" rev-parse --short HEAD)"
           test -f "arch/arm64/configs/$DEFCONFIG_NAME"
+          grep -q 'DTC_EXT=.*tools/dtc' "$GITHUB_WORKSPACE/NonGKI_Kernel_Build_2nd/.github/workflows/build-process/action.yml" || true
 
       - name: Optional Re-Kernel patches
         uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/patch-rekernel
@@ -148,8 +235,46 @@ jobs:
       - name: Compile kernel
         uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/build-process
 
-      - name: Package flashable kernel ZIP
+      - name: Package flashable AnyKernel3 ZIP
         uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/pack-process
+
+      - name: Send kernel ZIP to Telegram
+        if: ${{ inputs.telegram_delivery == 'send' }}
+        shell: bash
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          CLANG_PROFILE: ${{ inputs.clang_profile }}
+        run: |
+          set -euo pipefail
+
+          : "${TELEGRAM_BOT_TOKEN:?Add TELEGRAM_BOT_TOKEN under Settings > Secrets and variables > Actions}"
+          : "${TELEGRAM_CHAT_ID:?Add TELEGRAM_CHAT_ID under Settings > Secrets and variables > Actions}"
+          : "${PACK_NAME:?The upstream pack step did not export PACK_NAME}"
+
+          ZIP_PATH="$GITHUB_WORKSPACE/device_kernel/$PACK_NAME"
+          test -s "$ZIP_PATH" || {
+            echo "::error::Expected AnyKernel3 ZIP not found: $ZIP_PATH"
+            exit 1
+          }
+
+          printf -v CAPTION 'NOCTURNE // SDM450\nReSukiSU + SUSFS\nDefconfig: %s\nClang: %s\nCommit: %.7s' \
+            "$DEFCONFIG_NAME" "$CLANG_PROFILE" "$GITHUB_SHA"
+
+          RESPONSE="$(curl --fail-with-body --silent --show-error --retry 2 --max-time 300 \
+            --request POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+            --form-string "chat_id=${TELEGRAM_CHAT_ID}" \
+            --form-string "caption=$CAPTION" \
+            --form "document=@${ZIP_PATH};type=application/zip")"
+
+          printf '%s' "$RESPONSE" | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)
+          if not data.get("ok"):
+              print("Telegram upload failed: " + str(data.get("description", "unknown API error")), file=sys.stderr)
+              sys.exit(1)
+          print("Telegram accepted the kernel ZIP.")
+          '
 
       - name: Upload build artifact
         uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/upload-files
