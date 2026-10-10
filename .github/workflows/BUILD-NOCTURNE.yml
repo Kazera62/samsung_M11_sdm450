@@ -1,254 +1,155 @@
 name: NOCTURNE // SDM450 Kernel Build
-
-run-name: "NOCTURNE | ${{ inputs.defconfig }} | Clang ${{ inputs.clang_version }} | Root ${{ inputs.root_solution }}"
+run-name: "NOCTURNE | M11/A11 | ReSukiSU + SUSFS"
 
 on:
   workflow_dispatch:
-    inputs:
-      defconfig:
-        description: "Target kernel configuration"
-        required: true
-        type: choice
-        default: a11q_open_defconfig
-        options:
-          - a11q_open_defconfig
-          - a11q_usa_aio_defconfig
-          - sdm450_sec_a11q_eur_open_defconfig
-      clang_version:
-        description: "AOSP prebuilt Clang revision"
-        required: true
-        type: choice
-        default: r407598
-        options:
-          - r407598
-          - r416183b
-      root_solution:
-        description: "Optional root integration (source repository remains clean)"
-        required: true
-        type: choice
-        default: none
-        options:
-          - none
-          - kernelsu-next-legacy
-      build_user:
-        description: "KBUILD_BUILD_USER shown in kernel version"
-        required: true
-        type: string
-        default: NOCTURNE
-      build_host:
-        description: "KBUILD_BUILD_HOST shown in kernel version"
-        required: true
-        type: string
-        default: GitHub-Actions
 
 permissions:
   contents: read
 
 concurrency:
-  group: nocturne-kernel-${{ github.ref }}
+  group: nocturne-build-${{ github.ref }}
   cancel-in-progress: true
+
+# This workflow consumes the latest mainline build framework on every run.
+# Kernel source is cloned from the branch selected in the Actions UI.
+env:
+  DEVICE_NAME: "samsung_m11"
+  DEVICE_CODENAME: "m11q"
+
+  CUSTOM_CMDS: "CLANG_TRIPLE=aarch64-linux-gnu-"
+  EXTRA_CMDS: "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/clang-custom/lib64"
+
+  KERNEL_SOURCE: "https://github.com/Kazera62/samsung_M11_sdm450.git"
+  KERNEL_BRANCH: "${{ github.ref_name }}"
+
+  # Toolchains based on the working Linux 4.9 example in the upstream builder.
+  CLANG_SOURCE: "https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b.git"
+  CLANG_BRANCH: "lineage-20.0"
+
+  GCC_GNU: "false"
+  GCC_64_SOURCE: "https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git"
+  GCC_64_BRANCH: "lineage-19.1"
+  GCC_32_SOURCE: "https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9.git"
+  GCC_32_BRANCH: "lineage-19.1"
+
+  DEFCONFIG_SOURCE: ""
+  DEFCONFIG_NAME: "a11q_open_defconfig"
+  DEFCONFIG_ORIGIN_IMAGE: ""
+  DEFCONFIG_FROM_BOOT: "false"
+
+  # Upstream builder's SUSFS-capable ReSukiSU/BakaSU integration route.
+  # The upstream template identifies this selection as "bakasu".
+  KERNELSU_SOURCE: ""
+  KERNELSU_BRANCH: ""
+  KERNELSU_AUTO_GET: "true"
+  KERNELSU_AUTO_FORK: "bakasu"
+  KERNELSU_METHOD: "shell"
+
+  SUSFS_ENABLE: "true"
+  # Use the upstream generic kernel-version patch first; no device-specific
+  # fixed patch currently exists in this repository for the M11/SDM450 tree.
+  SUSFS_FIXED: "false"
+  SUSFS_FOLDER_FIXED: ""
+  SUSFS_PATCH_FIXED: ""
+  PATCHES_SOURCE: ""
+  PATCHES_BRANCH: ""
+
+  AK3_SOURCE: "https://github.com/osm0sis/AnyKernel3.git"
+  AK3_BRANCH: "master"
+  PACK_METHOD: "AnyKernel3"
+  PACK_KMODULES: "false"
+
+  BOOT_SOURCE: ""
+  NEED_DTBO: "false"
+  NEED_SAFE_DTBO: "false"
+  GENERATE_DTB: "false"
+  GENERATE_CHIP: "qcom"
+
+  ROM_TEXT: "nocturne_sdm450"
+  PYTHON_VERSION: "3"
+  HOOK_METHOD: "syscall"
+
+  REKERNEL_ENABLE: "false"
+  DROIDSPACES_ENABLE: "false"
+  NOMOUNT_ENABLE: "false"
+
+  KPM_ENABLE: "false"
+  KPM_INLINE: "false"
+  KPM_KPATCH_NEXT: "false"
+  KPM_PATCH_SOURCE: "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU_patch/refs/heads/main/kpm/patch_linux"
+
+  BASEBAND_GUARD_ENABLE: "false"
+  BASEBAND_GUARD_BOOT: "false"
+
+  BUILD_DEBUGGER: "true"
+  SKIP_PATCH: "false"
+
+  BUILD_OTHER_CONFIG: "false"
+  MERGE_CONFIG_FILES: ""
+
+  FREE_MORE_SPACE: "true"
 
 jobs:
   build:
-    name: Build kernel
-    runs-on: ubuntu-22.04
+    name: Samsung Galaxy M11 / A11 (SDM450)
+    runs-on: ubuntu-24.04
     timeout-minutes: 180
     env:
-      ARCH: arm64
-      SUBARCH: arm64
-      KBUILD_BUILD_USER: ${{ inputs.build_user }}
-      KBUILD_BUILD_HOST: ${{ inputs.build_host }}
-      DEFCONFIG: ${{ inputs.defconfig }}
-      CLANG_VERSION: ${{ inputs.clang_version }}
-      ROOT_SOLUTION: ${{ inputs.root_solution }}
+      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_HARDLINK: "true"
+
     steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
+      - name: Checkout upstream NonGKI build framework
+        uses: actions/checkout@v6
         with:
-          fetch-depth: 1
+          repository: JackA1ltman/NonGKI_Kernel_Build_2nd
+          ref: mainline
+          path: NonGKI_Kernel_Build_2nd
+          persist-credentials: false
 
-      - name: Install host dependencies
+      - name: Prepare build environment
+        uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/build-env
+
+      - name: Fetch toolchains and build dependencies
+        uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/build-ready
+
+      - name: Apply SUSFS kernel patches
+        uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/patch-susfs
+
+      - name: Apply no-kprobe compatibility patch
+        uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/patch-no-kprobe
+
+      - name: Device-specific build adjustments
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y \
-            bc bison build-essential cpio curl flex git libelf-dev \
-            libncurses-dev libssl-dev lz4 perl python3 rsync tar unzip wget zip
-          df -h "$GITHUB_WORKSPACE"
+          cd "$GITHUB_WORKSPACE/device_kernel"
+          echo "Target: Samsung Galaxy M11 / A11 (SDM450)"
+          echo "Defconfig: $DEFCONFIG_NAME"
+          echo "KernelSU selector: $KERNELSU_AUTO_FORK"
+          echo "SUSFS: $SUSFS_ENABLE"
+          echo "Upstream builder: $(git -C "$GITHUB_WORKSPACE/NonGKI_Kernel_Build_2nd" rev-parse --short HEAD)"
+          test -f "arch/arm64/configs/$DEFCONFIG_NAME"
 
-      - name: Download selected Clang and GCC toolchains
-        shell: bash
-        run: |
-          set -euo pipefail
+      - name: Optional Re-Kernel patches
+        uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/patch-rekernel
 
-          ROOT="$GITHUB_WORKSPACE"
-          TOOLCHAIN="$ROOT/toolchain"
-          CLANG_DIR="$TOOLCHAIN/clang"
-          GCC64_DIR="$TOOLCHAIN/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9"
-          GCC32_DIR="$TOOLCHAIN/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9"
+      - name: Optional Droidspaces patches
+        uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/patch-droidspaces
 
-          mkdir -p "$CLANG_DIR" "$GCC64_DIR" "$GCC32_DIR"
+      - name: Optional Baseband Guard patches
+        uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/patch-baseband-guard
 
-          case "$CLANG_VERSION" in
-            r407598)
-              CLANG_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/tags/android-11.0.0_r48/clang-r407598.tar.gz"
-              ;;
-            r416183b)
-              CLANG_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android-s-beta-4/clang-r416183b.tar.gz"
-              ;;
-            *)
-              echo "::error::Unsupported Clang revision: $CLANG_VERSION"
-              exit 1
-              ;;
-          esac
+      - name: Optional NoMount patches
+        uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/patch-nomount
 
-          GCC64_URL="https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/+archive/refs/tags/android-10.0.0_r47.tar.gz"
-          GCC32_URL="https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/+archive/refs/tags/android-10.0.0_r47.tar.gz"
+      - name: Compile kernel
+        uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/build-process
 
-          curl -fL --retry 3 --retry-delay 2 "$CLANG_URL" -o "$RUNNER_TEMP/clang.tar.gz"
-          tar -xzf "$RUNNER_TEMP/clang.tar.gz" -C "$CLANG_DIR"
+      - name: Package flashable kernel ZIP
+        uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/pack-process
 
-          curl -fL --retry 3 --retry-delay 2 "$GCC64_URL" -o "$RUNNER_TEMP/gcc64.tar.gz"
-          tar -xzf "$RUNNER_TEMP/gcc64.tar.gz" -C "$GCC64_DIR"
-
-          curl -fL --retry 3 --retry-delay 2 "$GCC32_URL" -o "$RUNNER_TEMP/gcc32.tar.gz"
-          tar -xzf "$RUNNER_TEMP/gcc32.tar.gz" -C "$GCC32_DIR"
-
-          chmod +x "$ROOT/tools/dtc"
-          test -x "$CLANG_DIR/bin/clang"
-          test -x "$GCC64_DIR/bin/aarch64-linux-android-gcc"
-          test -x "$GCC32_DIR/bin/arm-linux-androideabi-gcc"
-
-          echo "Clang:"
-          "$CLANG_DIR/bin/clang" --version
-          echo "AArch64 GCC:"
-          "$GCC64_DIR/bin/aarch64-linux-android-gcc" --version | head -n 1
-          echo "ARM32 GCC:"
-          "$GCC32_DIR/bin/arm-linux-androideabi-gcc" --version | head -n 1
-
-      - name: Integrate KernelSU Next (optional)
-        if: ${{ inputs.root_solution == 'kernelsu-next-legacy' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl -fsSL "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
-          test -L drivers/kernelsu
-          grep -q 'drivers/kernelsu/Kconfig' drivers/Kconfig
-          grep -q 'obj-$(CONFIG_KSU) += kernelsu/' drivers/Makefile
-
-      - name: Configure and build
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          ROOT="$GITHUB_WORKSPACE"
-          OUT="$ROOT/out"
-          CLANG_DIR="$ROOT/toolchain/clang"
-          GCC64_DIR="$ROOT/toolchain/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9"
-          GCC32_DIR="$ROOT/toolchain/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9"
-
-          export PATH="$CLANG_DIR/bin:$GCC64_DIR/bin:$GCC32_DIR/bin:$PATH"
-          export LD_LIBRARY_PATH="$CLANG_DIR/lib64:${LD_LIBRARY_PATH:-}"
-          export KBUILD_BUILD_USER KBUILD_BUILD_HOST
-
-          mkdir -p "$OUT"
-
-          MAKE_ARGS=(
-            -j"$(nproc)"
-            -C "$ROOT"
-            "O=$OUT"
-            ARCH=arm64
-            "CROSS_COMPILE=$GCC64_DIR/bin/aarch64-linux-android-"
-            "CROSS_COMPILE_ARM32=$GCC32_DIR/bin/arm-linux-androideabi-"
-            "CC=$CLANG_DIR/bin/clang"
-            CLANG_TRIPLE=aarch64-linux-gnu-
-            "DTC_EXT=$ROOT/tools/dtc"
-            CONFIG_BUILD_ARM64_DT_OVERLAY=y
-          )
-
-          echo "Target defconfig: $DEFCONFIG"
-          echo "Compiler: Clang $CLANG_VERSION"
-          echo "Root option: $ROOT_SOLUTION"
-          echo "Build identity: $KBUILD_BUILD_USER@$KBUILD_BUILD_HOST"
-
-          make "${MAKE_ARGS[@]}" "$DEFCONFIG"
-
-          if [[ "$ROOT_SOLUTION" == "kernelsu-next-legacy" ]]; then
-            scripts/config --file "$OUT/.config" -e KSU
-            make "${MAKE_ARGS[@]}" olddefconfig
-            grep -q '^CONFIG_KSU=y$' "$OUT/.config" || {
-              echo "::error::CONFIG_KSU was not enabled after olddefconfig."
-              exit 1
-            }
-          fi
-
-          make "${MAKE_ARGS[@]}"
-
-          IMAGE_DIR="$OUT/arch/arm64/boot"
-          DTB_DIR="$IMAGE_DIR/dts/samsung"
-
-          test -s "$IMAGE_DIR/Image" || {
-            echo "::error::Kernel Image was not produced."
-            exit 1
-          }
-
-          if [[ -s "$IMAGE_DIR/Image.gz" && -s "$IMAGE_DIR/Image.gz-dtb" ]]; then
-            if cmp -s "$IMAGE_DIR/Image.gz" "$IMAGE_DIR/Image.gz-dtb"; then
-              echo "::error::Image.gz-dtb is identical to Image.gz; device tree packaging appears to have failed."
-              exit 1
-            fi
-          else
-            echo "::error::Image.gz or Image.gz-dtb is missing. Check the build output."
-            exit 1
-          fi
-
-          DTB_COUNT="$(find "$DTB_DIR" -type f -name '*.dtb' 2>/dev/null | wc -l)"
-          if [[ "$DTB_COUNT" -eq 0 ]]; then
-            echo "::error::No Samsung DTB files were generated."
-            exit 1
-          fi
-
-          mkdir -p "$ROOT/dist/dts"
-          cp "$IMAGE_DIR/Image" "$ROOT/dist/"
-          cp "$IMAGE_DIR/Image.gz" "$ROOT/dist/"
-          cp "$IMAGE_DIR/Image.gz-dtb" "$ROOT/dist/"
-          find "$DTB_DIR" -type f -name '*.dtb' -exec cp -t "$ROOT/dist/dts/" {} +
-          cp "$OUT/.config" "$ROOT/dist/kernel.config"
-          [[ ! -f "$OUT/System.map" ]] || cp "$OUT/System.map" "$ROOT/dist/"
-
-          {
-            echo "Project=NOCTURNE"
-            echo "Commit=$(git rev-parse HEAD)"
-            echo "Defconfig=$DEFCONFIG"
-            echo "Clang=$CLANG_VERSION"
-            echo "Root=$ROOT_SOLUTION"
-            echo "Kernel=$(make "${MAKE_ARGS[@]}" -s kernelversion)"
-            echo "BuildUser=$KBUILD_BUILD_USER"
-            echo "BuildHost=$KBUILD_BUILD_HOST"
-            echo "BuildUTC=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-            echo "DTBCount=$DTB_COUNT"
-          } > "$ROOT/dist/build-info.txt"
-
-          {
-            echo "## NOCTURNE build complete"
-            echo
-            echo "- **Commit:** `$(git rev-parse --short HEAD)`"
-            echo "- **Defconfig:** `$DEFCONFIG`"
-            echo "- **Clang:** `$CLANG_VERSION`"
-            echo "- **Root integration:** `$ROOT_SOLUTION`"
-            echo "- **Build identity:** `$KBUILD_BUILD_USER@$KBUILD_BUILD_HOST`"
-            echo "- **Samsung DTBs generated:** `$DTB_COUNT`"
-            echo
-            echo "Artifacts contain kernel images, Samsung DTBs, config, and build metadata."
-            echo "No flashable ZIP is generated by this workflow."
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload kernel artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: NOCTURNE-${{ inputs.defconfig }}-${{ inputs.clang_version }}-${{ inputs.root_solution }}-${{ github.run_number }}
-          path: dist/
-          if-no-files-found: error
-          compression-level: 6
-          retention-days: 14
+      - name: Upload build artifact
+        uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/upload-files
