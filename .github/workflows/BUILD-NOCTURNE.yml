@@ -132,14 +132,13 @@ jobs:
         with:
           repository: JackA1ltman/NonGKI_Kernel_Build_2nd
           ref: mainline
-          path: NonGKI_Kernel_Build_2nd
           persist-credentials: false
 
       - name: Prepare build environment
-        uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/build-env
+        uses: ./.github/workflows/build-env
 
       - name: Fetch toolchains and build dependencies
-        uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/build-ready
+        uses: ./.github/workflows/build-ready
 
       - name: Configure AnyKernel3 for Samsung M11 / A11
         shell: bash
@@ -201,10 +200,10 @@ jobs:
           grep -nE 'kernel.string=|device.name[0-9]+=|^BLOCK=|^IS_SLOT_DEVICE=' "$AK"
 
       - name: Apply SUSFS kernel patches
-        uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/patch-susfs
+        uses: ./.github/workflows/patch-susfs
 
       - name: Apply no-kprobe compatibility patch
-        uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/patch-no-kprobe
+        uses: ./.github/workflows/patch-no-kprobe
 
       - name: Device-specific build validation
         shell: bash
@@ -216,27 +215,26 @@ jobs:
           echo "KernelSU selector: $KERNELSU_AUTO_FORK"
           echo "SUSFS: $SUSFS_ENABLE"
           echo "Clang profile: ${{ inputs.clang_profile }}"
-          echo "Upstream builder: $(git -C "$GITHUB_WORKSPACE/NonGKI_Kernel_Build_2nd" rev-parse --short HEAD)"
+          echo "Upstream builder: $(git -C "$GITHUB_WORKSPACE" rev-parse --short HEAD)"
           test -f "arch/arm64/configs/$DEFCONFIG_NAME"
-          grep -q 'DTC_EXT=.*tools/dtc' "$GITHUB_WORKSPACE/NonGKI_Kernel_Build_2nd/.github/workflows/build-process/action.yml" || true
 
       - name: Optional Re-Kernel patches
-        uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/patch-rekernel
+        uses: ./.github/workflows/patch-rekernel
 
       - name: Optional Droidspaces patches
-        uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/patch-droidspaces
+        uses: ./.github/workflows/patch-droidspaces
 
       - name: Optional Baseband Guard patches
-        uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/patch-baseband-guard
+        uses: ./.github/workflows/patch-baseband-guard
 
       - name: Optional NoMount patches
-        uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/patch-nomount
+        uses: ./.github/workflows/patch-nomount
 
       - name: Compile kernel
-        uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/build-process
+        uses: ./.github/workflows/build-process
 
       - name: Package flashable AnyKernel3 ZIP
-        uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/pack-process
+        uses: ./.github/workflows/pack-process
 
       - name: Send kernel ZIP to Telegram
         if: ${{ inputs.telegram_delivery == 'send' }}
@@ -277,4 +275,4 @@ jobs:
           '
 
       - name: Upload build artifact
-        uses: ./NonGKI_Kernel_Build_2nd/.github/workflows/upload-files
+        uses: ./.github/workflows/upload-files
