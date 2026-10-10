@@ -35,7 +35,7 @@ Open **[BUILD-NOCTURNE](.github/workflows/BUILD-NOCTURNE.yml)** in the repositor
 | KernelSU fork | `bakasu`, `sukisu`, `next`, `rsuntk`, `xxksu` | `bakasu` |
 | KernelSU integration method | `shell`, `manual` | `shell` |
 | SUSFS | Enabled / disabled | Enabled |
-| SUSFS patch diagnostics | Enabled / disabled | Enabled |
+| Build and patch diagnostics | Enabled / disabled | Enabled |
 | Continue with rejected SUSFS hunks | Disabled / enabled | Disabled |
 | Re:Kernel | Disabled / enabled | Disabled |
 | Droidspaces | Disabled / enabled | Disabled |
