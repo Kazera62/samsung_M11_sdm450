@@ -25,7 +25,7 @@ Compatibility depends on exact model, firmware, and partition layout. A successf
 
 ## Run a build
 
-Open **[BUILD-NOCTURNE](.github/workflows/BUILD-NOCTURNE.yml)** in the repository's **Actions** tab and choose **Run workflow**. The workflow exposes 22 inputs for compiler selection, root/SUSFS integration, optional patches, packaging, and Telegram delivery.
+Open **[BUILD-NOCTURNE](.github/workflows/BUILD-NOCTURNE.yml)** in the repository's **Actions** tab and choose **Run workflow**. The workflow exposes 19 configurable inputs for compiler selection, root/SUSFS integration, optional patches, packaging, and Telegram delivery.
 
 ### Workflow menu reference
 
@@ -33,22 +33,19 @@ Open **[BUILD-NOCTURNE](.github/workflows/BUILD-NOCTURNE.yml)** in the repositor
 |---|---|---|
 | Clang toolchain | `lineage-r416183b`, `proton-clang` | `lineage-r416183b` |
 | KernelSU fork | `bakasu`, `sukisu`, `next`, `rsuntk`, `xxksu` | `bakasu` |
-| KernelSU integration method | `shell`, `manual`, `only` | `shell` |
+| KernelSU integration method | `shell`, `manual` | `shell` |
 | SUSFS | Enabled / disabled | Enabled |
 | SUSFS patch diagnostics | Enabled / disabled | Enabled |
 | Continue with rejected SUSFS hunks | Disabled / enabled | Disabled |
 | Re:Kernel | Disabled / enabled | Disabled |
 | Droidspaces | Disabled / enabled | Disabled |
 | NoMount | Disabled / enabled | Disabled |
-| KernelSU hook method | `syscall`, `manual` | `syscall` |
 | KPM | Disabled / enabled | Disabled |
 | Inline KPM | Disabled / enabled | Disabled |
 | KPatch-Next | Disabled / enabled | Disabled |
 | Baseband Guard | Disabled / enabled | Disabled |
 | Baseband Guard boot protection | Disabled / enabled | Disabled |
 | Generate a standalone DTB | Disabled / enabled | Disabled |
-| Package DTBO | Disabled / enabled | Disabled |
-| Safe DTBO option | Disabled / enabled | Disabled |
 | Package kernel modules | Disabled / enabled | Disabled |
 | Merge config files | Comma-separated config filenames, or blank | Blank |
 | Free workspace space | Enabled / disabled | Enabled |
@@ -59,7 +56,7 @@ The defconfig remains fixed to `a11q_open_defconfig`; no build-identity override
 ### Important option dependencies
 
 - With SUSFS enabled, the upstream builder supports the `bakasu` (BakaSU / ReSukiSU lineage) and `sukisu` (SukiSU-Ultra) routes. Selecting `next`, `rsuntk`, or `xxksu` requires SUSFS to be disabled; otherwise the validation step stops the run.
-- Inline KPM requires KPM enabled and `sukisu` selected. KPatch-Next requires KPM enabled.
+- KPM must be paired with Inline KPM or KPatch-Next. Inline KPM requires KPM enabled and `sukisu` selected. KPatch-Next requires KPM enabled.
 - Baseband Guard boot protection requires Baseband Guard enabled.
 - Enabling Droidspaces while SUSFS is enabled may produce an upstream compatibility warning. Re:Kernel, Droidspaces, NoMount, KPM, Baseband Guard, DTB/DTBO features, and custom config merges are optional and are not enabled by default.
 - Enabling “continue with rejected SUSFS hunks” can result in a partially patched kernel. Review the rejection logs and artifacts before using that build.
