@@ -33,7 +33,7 @@ Open **[BUILD-NOCTURNE](.github/workflows/BUILD-NOCTURNE.yml)** in the repositor
 |---|---|---|
 | Clang toolchain | `lineage-r416183b`, `proton-clang` | `lineage-r416183b` |
 | KernelSU fork | `bakasu`, `sukisu`, `next`, `rsuntk`, `xxksu` | `bakasu` |
-| KernelSU integration method | `shell`, `manual` | `shell` |
+| KernelSU integration method | `shell`, `manual`, `only` | `shell` |
 | SUSFS | Enabled / disabled | Enabled |
 | Build and patch diagnostics | Enabled / disabled | Enabled |
 | Continue with rejected SUSFS hunks | Disabled / enabled | Disabled |
