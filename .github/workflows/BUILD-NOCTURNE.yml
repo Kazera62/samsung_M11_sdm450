@@ -80,14 +80,6 @@ on:
         options:
           - disabled
           - enabled
-      hook_method:
-        description: "KernelSU hook method used by the upstream integration"
-        required: true
-        type: choice
-        default: syscall
-        options:
-          - syscall
-          - manual
       kpm_enable:
         description: "Enable KPM support where supported by the selected root implementation"
         required: true
@@ -130,22 +122,6 @@ on:
           - enabled
       generate_dtb:
         description: "Generate a standalone DTB from DTS files if needed; normally leave disabled for this device"
-        required: true
-        type: choice
-        default: disabled
-        options:
-          - disabled
-          - enabled
-      need_dtbo:
-        description: "Include a built DTBO image in AnyKernel3 when the build produces one"
-        required: true
-        type: choice
-        default: disabled
-        options:
-          - disabled
-          - enabled
-      need_safe_dtbo:
-        description: "Enable the upstream safe-DTBO option when applicable"
         required: true
         type: choice
         default: disabled
@@ -239,14 +215,14 @@ env:
   PACK_KMODULES: "${{ inputs.pack_kmodules == 'enabled' && 'true' || 'false' }}"
 
   BOOT_SOURCE: ""
-  NEED_DTBO: "${{ inputs.need_dtbo == 'enabled' && 'true' || 'false' }}"
-  NEED_SAFE_DTBO: "${{ inputs.need_safe_dtbo == 'enabled' && 'true' || 'false' }}"
+  NEED_DTBO: "false"
+  NEED_SAFE_DTBO: "false"
   GENERATE_DTB: "${{ inputs.generate_dtb == 'enabled' && 'true' || 'false' }}"
   GENERATE_CHIP: "qcom"
 
   ROM_TEXT: "nocturne_sdm450"
   PYTHON_VERSION: "3"
-  HOOK_METHOD: "${{ inputs.hook_method }}"
+  HOOK_METHOD: "syscall"
 
   REKERNEL_ENABLE: "${{ inputs.rekernel_enable == 'enabled' && 'true' || 'false' }}"
   DROIDSPACES_ENABLE: "${{ inputs.droidspaces_enable == 'enabled' && 'true' || 'false' }}"
@@ -285,6 +261,34 @@ jobs:
           repository: JackA1ltman/NonGKI_Kernel_Build_2nd
           ref: mainline
           persist-credentials: false
+      - name: Validate build option dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "KernelSU fork: $KERNELSU_AUTO_FORK | SUSFS: $SUSFS_ENABLE"
+          echo "KPM: $KPM_ENABLE | Inline: $KPM_INLINE | KPatch-Next: $KPM_KPATCH_NEXT"
+          echo "Baseband Guard: $BASEBAND_GUARD_ENABLE | boot protection: $BASEBAND_GUARD_BOOT"
+
+          if [[ "$SUSFS_ENABLE" == "true" && "$KERNELSU_AUTO_FORK" != "bakasu" && "$KERNELSU_AUTO_FORK" != "sukisu" ]]; then
+            echo "::error::The upstream framework supports SUSFS with bakasu or sukisu only. Select one of those forks or disable SUSFS."
+            exit 1
+          fi
+          if [[ "$KPM_ENABLE" == "true" && "$KPM_INLINE" != "true" && "$KPM_KPATCH_NEXT" != "true" ]]; then
+            echo "::error::KPM is enabled without an active KPM mode. Enable Inline KPM or KPatch-Next, or disable KPM."
+            exit 1
+          fi
+          if [[ "$KPM_INLINE" == "true" && ( "$KPM_ENABLE" != "true" || "$KERNELSU_AUTO_FORK" != "sukisu" ) ]]; then
+            echo "::error::Inline KPM requires KPM enabled and the sukisu (SukiSU-Ultra) fork."
+            exit 1
+          fi
+          if [[ "$KPM_KPATCH_NEXT" == "true" && "$KPM_ENABLE" != "true" ]]; then
+            echo "::error::KPatch-Next requires KPM enabled."
+            exit 1
+          fi
+          if [[ "$BASEBAND_GUARD_BOOT" == "true" && "$BASEBAND_GUARD_ENABLE" != "true" ]]; then
+            echo "::error::Boot partition protection requires Baseband Guard enabled."
+            exit 1
+          fi
 
       - name: Prepare build environment
         uses: ./.github/workflows/build-env
@@ -305,31 +309,12 @@ jobs:
           cd "$GITHUB_WORKSPACE/device_kernel"
           echo "Target: Samsung Galaxy M11 / A11 (SDM450)"
           echo "Defconfig: $DEFCONFIG_NAME"
-          echo "KernelSU fork: $KERNELSU_AUTO_FORK"
-          echo "KernelSU method: $KERNELSU_METHOD"
-          echo "SUSFS: $SUSFS_ENABLE"
-          echo "Clang profile: ${{ inputs.clang_profile }}"
+          echo "KernelSU fork: $KERNELSU_AUTO_FORK | method: $KERNELSU_METHOD"
+          echo "SUSFS: $SUSFS_ENABLE | Clang: ${{ inputs.clang_profile }}"
           echo "Re:Kernel: $REKERNEL_ENABLE | Droidspaces: $DROIDSPACES_ENABLE | NoMount: $NOMOUNT_ENABLE"
           echo "KPM: $KPM_ENABLE | modules: $PACK_KMODULES | free space: $FREE_MORE_SPACE"
           echo "Upstream builder: $(git -C "$GITHUB_WORKSPACE" rev-parse --short HEAD)"
           test -f "arch/arm64/configs/$DEFCONFIG_NAME"
-
-          if [[ "$SUSFS_ENABLE" == "true" && "$KERNELSU_AUTO_FORK" != "bakasu" && "$KERNELSU_AUTO_FORK" != "sukisu" ]]; then
-            echo "::error::The upstream framework supports SUSFS with bakasu or sukisu only. Select one of those forks or disable SUSFS."
-            exit 1
-          fi
-          if [[ "$KPM_INLINE" == "true" && ( "$KPM_ENABLE" != "true" || "$KERNELSU_AUTO_FORK" != "sukisu" ) ]]; then
-            echo "::error::Inline KPM requires KPM enabled and the sukisu (SukiSU-Ultra) fork."
-            exit 1
-          fi
-          if [[ "$KPM_KPATCH_NEXT" == "true" && "$KPM_ENABLE" != "true" ]]; then
-            echo "::error::KPatch-Next requires KPM enabled."
-            exit 1
-          fi
-          if [[ "$BASEBAND_GUARD_BOOT" == "true" && "$BASEBAND_GUARD_ENABLE" != "true" ]]; then
-            echo "::error::Boot partition protection requires Baseband Guard enabled."
-            exit 1
-          fi
           if [[ -n "$MERGE_CONFIG_FILES" ]]; then
             IFS=',' read -ra CONFIG_LIST <<< "$MERGE_CONFIG_FILES"
             for config in "${CONFIG_LIST[@]}"; do
