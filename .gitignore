@@ -34,11 +34,11 @@
 *.patch
 *.gcno
 *.ll
-modules.builtin
-Module.symvers
 *.dwo
 *.su
 *.c.[012]*.*
+modules.builtin
+Module.symvers
 
 #
 # Top-level generic files
@@ -59,7 +59,7 @@ Module.symvers
 /debian/
 
 #
-# tar directory (make tar*-pkg)
+# tar directory (make tar-pkg)
 #
 /tar-install/
 
@@ -69,6 +69,9 @@ Module.symvers
 !.gitignore
 !.mailmap
 !.cocciconfig
+!.github/
+!.github/workflows/
+!.github/workflows/BUILD-NOCTURNE.yml
 
 #
 # Generated include files
@@ -80,21 +83,21 @@ arch/*/include/generated
 # stgit generated dirs
 patches-*
 
-# quilt's files
+# quilt generated files
 patches
 series
 
-# cscope files
+# cscope
 cscope.*
 ncscope.*
 
-# gnu global files
+# gnu global
 GPATH
 GRTAGS
 GSYMS
 GTAGS
 
-# id-utils files
+# id-utils
 ID
 
 *.orig
@@ -120,7 +123,7 @@ all.config
 kernel/configs/android-*.cfg
 
 #
-#Ignoring Android.bp link file
+# Android.bp link file
 #
 Android.bp
 out/
