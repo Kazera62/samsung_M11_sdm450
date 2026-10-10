@@ -236,6 +236,9 @@ jobs:
       - name: Package flashable AnyKernel3 ZIP
         uses: ./.github/workflows/pack-process
 
+      - name: Upload build artifact
+        uses: ./.github/workflows/upload-files
+
       - name: Send kernel ZIP to Telegram
         if: ${{ inputs.telegram_delivery == 'send' }}
         shell: bash
@@ -274,5 +277,3 @@ jobs:
           print("Telegram accepted the kernel ZIP.")
           '
 
-      - name: Upload build artifact
-        uses: ./.github/workflows/upload-files
