@@ -41,7 +41,7 @@ on:
           - enabled
           - disabled
       patch_diagnostics:
-        description: "Collect rejected SUSFS hunks and stop on conflicts"
+        description: "Report rejected SUSFS hunks, stop on conflicts, and analyze compile failures"
         required: true
         type: choice
         default: enabled
