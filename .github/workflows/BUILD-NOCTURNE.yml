@@ -21,7 +21,7 @@ on:
         description: "Root implementation"
         required: true
         type: choice
-        default: ReSukiSU + SUSFS
+        default: ReSukiSU (tanpa SUSFS)
         options:
           - Non-root
           - ReSukiSU (tanpa SUSFS)
