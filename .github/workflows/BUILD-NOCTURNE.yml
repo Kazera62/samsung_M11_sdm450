@@ -213,15 +213,15 @@ jobs:
       - name: Fetch toolchains and kernel source
         uses: ./.github/workflows/build-ready
 
-      - name: Remove temporary root integration for Non-root build
+      - name: Ensure Non-root build has no root integration
         if: inputs.root == 'Non-root'
         shell: bash
         run: |
           set -euo pipefail
           cd "$GITHUB_WORKSPACE/device_kernel"
 
-          # The current upstream build-ready action installs a KSU fork
-          # unconditionally. Remove its symlink, source tree, and build wiring.
+          # Defense in depth: remove any residual KSU source/config wiring
+          # before kernel configuration, so Non-root output contains no KSU.
           rm -rf drivers/kernelsu KernelSU KernelSU-Next
 
           sed -i -E \
