@@ -1857,6 +1857,184 @@ jobs:
 
           echo "SUSFS core validated: path/mount hiding enabled; unported optional features disabled."
 
+      - name: Apply selected kernel defaults
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/device_kernel"
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          def fail(message):
+              raise SystemExit(f"::error::{message}")
+
+          def enabled(text, symbol):
+              return re.search(rf"^{re.escape(symbol)}=y$", text, re.M) is not None
+
+          def declared(text, symbol):
+              return re.search(
+                  rf"^(?:{re.escape(symbol)}=y|# {re.escape(symbol)} is not set)$",
+                  text,
+                  re.M,
+              ) is not None
+
+          config_path = Path("arch/arm64/configs") / os.environ["DEFCONFIG_NAME"]
+          if not config_path.is_file():
+              fail(f"Defconfig not found: {config_path}")
+          config_text = config_path.read_text()
+          lines = config_text.splitlines()
+
+          governor_map = {
+              "performance": "PERFORMANCE",
+              "powersave": "POWERSAVE",
+              "userspace": "USERSPACE",
+              "ondemand": "ONDEMAND",
+              "conservative": "CONSERVATIVE",
+              "schedutil": "SCHEDUTIL",
+          }
+          governor = os.environ.get("CPU_DEFAULT_GOVERNOR", "")
+          if governor not in governor_map:
+              fail(f"Unsupported CPU governor input: {governor}")
+          gov_upper = governor_map[governor]
+          if not enabled(config_text, f"CONFIG_CPU_FREQ_GOV_{gov_upper}"):
+              fail(
+                  f"CPU governor '{governor}' is not enabled in this branch's defconfig; "
+                  "the workflow menu and kernel config do not match."
+              )
+          if not declared(config_text, f"CONFIG_CPU_FREQ_DEFAULT_GOV_{gov_upper}"):
+              fail(f"Default CPU governor option is missing: {gov_upper}")
+          cpufreq_kconfig = Path("drivers/cpufreq/Kconfig").read_text()
+          if f"config CPU_FREQ_GOV_{gov_upper}" not in cpufreq_kconfig:
+              fail(f"CPU governor implementation is missing: {gov_upper}")
+
+          io_map = {"cfq": ("CFQ", "cfq"), "noop": ("NOOP", "noop")}
+          io_value = os.environ.get("IO_DEFAULT_SCHEDULER", "")
+          if io_value not in io_map:
+              fail(f"Unsupported I/O scheduler input: {io_value}")
+          io_upper, io_name = io_map[io_value]
+          if not enabled(config_text, f"CONFIG_IOSCHED_{io_upper}"):
+              fail(
+                  f"I/O scheduler '{io_value}' is not enabled in this branch's defconfig; "
+                  "the workflow menu and kernel config do not match."
+              )
+          iosched_kconfig = Path("block/Kconfig.iosched").read_text()
+          if f"config DEFAULT_{io_upper}" not in iosched_kconfig:
+              fail(f"Default I/O scheduler choice is missing: {io_upper}")
+
+          compression_map = {"lzo": "LZO", "lz4": "LZ4"}
+          compression = os.environ.get("ZRAM_COMPRESSION", "")
+          if compression not in compression_map:
+              fail(f"Unsupported zRAM compression input: {compression}")
+          compression_upper = compression_map[compression]
+          if not enabled(config_text, f"CONFIG_CRYPTO_{compression_upper}"):
+              fail(
+                  f"zRAM compressor '{compression}' lacks its crypto backend in this defconfig; "
+                  "the workflow menu and kernel config do not match."
+              )
+          if not enabled(config_text, "CONFIG_ZRAM"):
+              fail("CONFIG_ZRAM is disabled; a default zRAM compressor cannot be selected.")
+          zcomp_path = Path("drivers/block/zram/zcomp.c")
+          zram_path = Path("drivers/block/zram/zram_drv.c")
+          if not zcomp_path.is_file() or not zram_path.is_file():
+              fail("zRAM compressor source files are missing from this kernel branch.")
+          if f'"{compression}"' not in zcomp_path.read_text():
+              fail(f"zRAM compressor implementation is missing: {compression}")
+
+          tcp_map = {
+              "bic": ("BIC", "bic"),
+              "cubic": ("CUBIC", "cubic"),
+              "htcp": ("HTCP", "htcp"),
+              "westwood": ("WESTWOOD", "westwood"),
+              "reno": ("RENO", "reno"),
+          }
+          tcp_value = os.environ.get("TCP_DEFAULT_CONGESTION", "")
+          if tcp_value not in tcp_map:
+              fail(f"Unsupported TCP congestion input: {tcp_value}")
+          tcp_upper, tcp_name = tcp_map[tcp_value]
+          tcp_kconfig = Path("net/ipv4/Kconfig").read_text()
+          if f"config DEFAULT_{tcp_upper}" not in tcp_kconfig:
+              fail(f"Default TCP congestion choice is missing: {tcp_upper}")
+          if tcp_value != "reno" and not enabled(config_text, f"CONFIG_TCP_CONG_{tcp_upper}"):
+              fail(
+                  f"TCP congestion algorithm '{tcp_value}' is not enabled in this branch's defconfig; "
+                  "the workflow menu and kernel config do not match."
+              )
+          if not enabled(config_text, "CONFIG_TCP_CONG_ADVANCED"):
+              fail("CONFIG_TCP_CONG_ADVANCED is disabled; selected TCP choices are unavailable.")
+
+          hz_value = os.environ.get("CONFIG_HZ_VALUE", "")
+          if hz_value not in {"100", "250", "300", "1000"}:
+              fail(f"Unsupported CONFIG_HZ input: {hz_value}")
+          hz_symbol = f"CONFIG_HZ_{hz_value}"
+          if not declared(config_text, hz_symbol):
+              fail(f"{hz_symbol} is not defined by this branch's defconfig/Kconfig.")
+
+          def replace_choice(current_lines, pattern, replacement_lines):
+              matcher = re.compile(pattern)
+              return [line for line in current_lines if matcher.match(line) is None] + replacement_lines
+
+          lines = replace_choice(
+              lines,
+              r"^(?:# )?CONFIG_CPU_FREQ_DEFAULT_GOV_[A-Z0-9_]+(?:=.*| is not set)$",
+              [f"CONFIG_CPU_FREQ_DEFAULT_GOV_{gov_upper}=y"],
+          )
+          lines = replace_choice(
+              lines,
+              r"^(?:# )?CONFIG_DEFAULT_(?:DEADLINE|CFQ|NOOP)(?:=.*| is not set)$",
+              [f"CONFIG_DEFAULT_{io_upper}=y"],
+          )
+          lines = replace_choice(
+              lines,
+              r"^(?:# )?CONFIG_DEFAULT_(?:BIC|CUBIC|HTCP|HYBLA|VEGAS|VENO|WESTWOOD|DCTCP|CDG|BBR|RENO)(?:=.*| is not set)$",
+              [f"CONFIG_DEFAULT_{tcp_upper}=y"],
+          )
+          lines = replace_choice(
+              lines,
+              r"^(?:# )?CONFIG_DEFAULT_TCP_CONG(?:=.*| is not set)$",
+              [],
+          )
+          lines = replace_choice(
+              lines,
+              r"^(?:# )?CONFIG_DEFAULT_IOSCHED(?:=.*| is not set)$",
+              [],
+          )
+          lines = replace_choice(
+              lines,
+              r"^(?:# )?CONFIG_HZ_[0-9]+(?:=.*| is not set)$",
+              [f"CONFIG_HZ_{hz_value}=y"],
+          )
+          lines = replace_choice(lines, r"^CONFIG_HZ=.*$", [])
+          config_path.write_text("\n".join(lines) + "\n")
+
+          # Change only the default zRAM compressor. Keep the boot image gzip
+          # path unchanged because packaging requires Image.gz-dtb.
+          old_block = """#if IS_ENABLED(CONFIG_CRYPTO_ZSTD)
+          static const char *default_compressor = "zstd";
+          #elif IS_ENABLED(CONFIG_CRYPTO_LZ4)
+          static const char *default_compressor = "lz4";
+          #else
+          static const char *default_compressor = "lzo";
+          #endif"""
+          driver_text = zram_path.read_text()
+          if driver_text.count(old_block) != 1:
+              fail("Expected exactly one known zRAM default-compressor block; source layout changed.")
+          driver_text = driver_text.replace(
+              old_block,
+              f'static const char *default_compressor = "{compression}";',
+              1,
+          )
+          zram_path.write_text(driver_text)
+
+          print("Selected kernel defaults prepared:")
+          print(f"  CPU governor: {governor}")
+          print(f"  I/O scheduler: {io_value}")
+          print(f"  zRAM compression: {compression}")
+          print(f"  TCP congestion: {tcp_value}")
+          print(f"  CONFIG_HZ: {hz_value}")
+          PY
+
       - name: Compile kernel
         uses: ./.github/workflows/build-process
 
