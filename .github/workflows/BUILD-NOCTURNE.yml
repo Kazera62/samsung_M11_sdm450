@@ -63,8 +63,7 @@ env:
   KERNELSU_METHOD: "shell"
   SUSFS_ENABLE: "${{ inputs.root == 'BakaSU + SUSFS' && 'true' || 'false' }}"
   SUSFS_FIXED: "false"
-  # Non-empty selector tells the framework patch debugger to apply our inline
-  # Samsung 4.9 compatibility adjustment (no extra patch folder in kernel source).
+  # Non-empty selector activates the inline Samsung Linux 4.9 compatibility adjustment.
   SUSFS_PATCH_FIXED: "${{ inputs.root == 'BakaSU + SUSFS' && 'inline_samsung_49_compat' || '' }}"
 
   # Always use the user's own AnyKernel3 repository.
@@ -219,7 +218,7 @@ jobs:
                   )
 
           # Embed the Samsung 4.9 compatibility hunk in this workflow instead
-          # of adding a NonGKI_Kernel_Patches directory to the kernel source.
+          # of adding a separate patch directory to the kernel source.
           fixed_start = susfs_action.find("      - name: SUSFS Patch Fixed")
           upload_start = susfs_action.find("      - name: Upload Build Patch Rejected Files", fixed_start)
           if fixed_start < 0 or upload_start < 0:
@@ -309,7 +308,7 @@ jobs:
           )
           env_text = env_text[:section_start] + newer_section + env_text[section_end:]
           env_path.write_text(env_text)
-          print("Framework tuned for this kernel; rootless setup and unrelated patch steps are skipped.")
+          print("Framework actions adjusted: rootless setup is skipped and SUSFS compatibility stays inline.")
           PY
 
       - name: Prepare build environment
@@ -664,7 +663,7 @@ jobs:
           )
           env_text = env_text[:section_start] + newer_section + env_text[section_end:]
           env_path.write_text(env_text)
-          print("Framework tuned for this kernel; rootless setup and unrelated patch steps are skipped.")
+          print("Framework actions adjusted: rootless setup is skipped and SUSFS compatibility stays inline.")
           PY
 
       - name: Prepare build environment
