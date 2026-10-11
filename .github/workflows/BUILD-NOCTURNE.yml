@@ -29,9 +29,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: nocturne-build-${{ github.ref }}
-  cancel-in-progress: true
 
 env:
   DEVICE_NAME: "samsung_m11"
@@ -78,7 +75,7 @@ env:
 
 jobs:
   build:
-    name: Samsung Galaxy M11 / A11 (SDM450)
+    name: Samsung M11 / A11
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     env:
