@@ -56,13 +56,13 @@ env:
 
   DEFCONFIG_NAME: "a11q_open_defconfig"
 
-  # ReSukiSU uses the setup script and manual hooks on this Linux 4.9 Non-GKI kernel.
+  # BakaSU/ReSukiSU root setup supports manual-hook and SUSFS build choices.
   KERNELSU_AUTO_GET: "${{ inputs.root == 'Non-root' && 'true' || 'false' }}"
   KERNELSU_SOURCE: "https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh"
   # SUSFS builds use the last BakaSU revision before upstream suspended SUSFS integration.
-  KERNELSU_BRANCH: "${{ inputs.root == 'ReSukiSU + SUSFS' && 'fdd18805bdac7d05aec4db2ef7a4a548037e3857' || 'main' }}"
+  KERNELSU_BRANCH: "${{ inputs.root == 'ReSukiSU + SUSFS' && '5b76b884c75f729a220bb317aa4a4fc78f0e0e9c' || 'main' }}"
   KERNELSU_METHOD: "shell"
-  # SUSFS is disabled until its Linux 4.9 backport is validated.
+  # SUSFS is opt-in; the default root build stays on manual hooks without SUSFS.
   SUSFS_ENABLE: "${{ inputs.root == 'ReSukiSU + SUSFS' && 'true' || 'false' }}"
   SUSFS_FIXED: "false"
   SUSFS_PATCH_FIXED: "${{ inputs.root == 'ReSukiSU + SUSFS' && 'nocturne_susfs_49fix' || '' }}"
@@ -334,7 +334,19 @@ jobs:
             exit 1
           }
           grep -q 'susfs_is_current_ksu_domain' fs/namespace.c || {
-            echo "::error::SUSFS mount implementation did not apply."
+            echo "::error::SUSFS mount declarations are missing."
+            exit 1
+          }
+          grep -q 'susfs_alloc_non_unshare_ksu_vfsmnt' fs/namespace.c || {
+            echo "::error::SUSFS mount implementation did not apply completely."
+            exit 1
+          }
+          grep -q 'susfs_is_inode_sus_path' fs/namei.c || {
+            echo "::error::SUSFS path-hiding implementation did not apply."
+            exit 1
+          }
+          grep -Fq 'obj-$(CONFIG_KSU_SUSFS) += susfs.o' fs/Makefile || {
+            echo "::error::SUSFS core is not wired into fs/Makefile."
             exit 1
           }
           grep -q '#include <linux/susfs_def.h>' fs/namespace.c || {
