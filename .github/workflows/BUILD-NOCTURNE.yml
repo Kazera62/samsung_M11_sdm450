@@ -25,6 +25,7 @@ on:
         options:
           - Non-root
           - ReSukiSU (tanpa SUSFS)
+          - ReSukiSU + SUSFS
 
 permissions:
   contents: read
@@ -56,12 +57,16 @@ env:
   DEFCONFIG_NAME: "a11q_open_defconfig"
 
   # ReSukiSU uses the setup script and manual hooks on this Linux 4.9 Non-GKI kernel.
-  KERNELSU_AUTO_GET: "${{ inputs.root == 'ReSukiSU (tanpa SUSFS)' && 'false' || 'true' }}"
-  KERNELSU_SOURCE: "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh"
-  KERNELSU_BRANCH: "main"
+  KERNELSU_AUTO_GET: "${{ inputs.root == 'Non-root' && 'true' || 'false' }}"
+  KERNELSU_SOURCE: "https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh"
+  # SUSFS builds use the last BakaSU revision before upstream suspended SUSFS integration.
+  KERNELSU_BRANCH: "${{ inputs.root == 'ReSukiSU + SUSFS' && 'fdd18805bdac7d05aec4db2ef7a4a548037e3857' || 'main' }}"
   KERNELSU_METHOD: "shell"
   # SUSFS is disabled until its Linux 4.9 backport is validated.
-  SUSFS_ENABLE: "false"
+  SUSFS_ENABLE: "${{ inputs.root == 'ReSukiSU + SUSFS' && 'true' || 'false' }}"
+  SUSFS_FIXED: "false"
+  SUSFS_PATCH_FIXED: "${{ inputs.root == 'ReSukiSU + SUSFS' && 'nocturne_susfs_49fix' || '' }}"
+  SUSFS_FOLDER_FIXED: ""
 
   # Always use the user's own AnyKernel3 repository.
   AK3_SOURCE: "https://github.com/Kazera62/AnyKernel3.git"
@@ -162,6 +167,26 @@ jobs:
           ])
           ready = replace_once(ready, old_config, new_config, "root config step")
           ready_path.write_text(ready)
+
+          # The optional SUSFS hunks below target APIs not present in this Samsung
+          # Linux 4.9 tree. Retain the core path/mount feature set for this build.
+          susfs_action_path = Path(".github/workflows/patch-susfs/action.yml")
+          susfs_action = susfs_action_path.read_text()
+          for feature in (
+              "SUS_KSTAT",
+              "SPOOF_CMDLINE_OR_BOOTCONFIG",
+              "OPEN_REDIRECT",
+              "SUS_MAP",
+          ):
+              pattern = re.compile(
+                  rf'(?m)^ *echo "CONFIG_KSU_SUSFS_{feature}=y" >> .*$'
+              )
+              susfs_action, count = pattern.subn("", susfs_action)
+              if count != 1:
+                  raise SystemExit(
+                      f"Expected one optional SUSFS config line for {feature}, found {count}."
+                  )
+          susfs_action_path.write_text(susfs_action)
 
           # Keep runner setup lighter: skip optional package purging and compilation
           # of Coccinelle, which is not used by this build path.
@@ -283,6 +308,78 @@ jobs:
       - name: Apply KernelSU hook patch
         if: inputs.root == 'ReSukiSU (tanpa SUSFS)'
         uses: ./.github/workflows/patch-no-kprobe
+
+      - name: Apply SUSFS patch for Samsung Linux 4.9
+        if: inputs.root == 'ReSukiSU + SUSFS'
+        uses: ./.github/workflows/patch-susfs
+
+      - name: Validate SUSFS integration
+        if: inputs.root == 'ReSukiSU + SUSFS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/device_kernel"
+
+          config="arch/arm64/configs/$DEFCONFIG_NAME"
+          test -s "$config" || {
+            echo "::error::SUSFS defconfig is missing."
+            exit 1
+          }
+          test -s fs/susfs.c || {
+            echo "::error::The SUSFS core source fs/susfs.c was not installed."
+            exit 1
+          }
+          test -s include/linux/susfs.h || {
+            echo "::error::The SUSFS public header is missing."
+            exit 1
+          }
+          grep -q 'susfs_is_current_ksu_domain' fs/namespace.c || {
+            echo "::error::SUSFS mount implementation did not apply."
+            exit 1
+          }
+          grep -q '#include <linux/susfs_def.h>' fs/namespace.c || {
+            echo "::error::Samsung Linux 4.9 SUSFS compatibility hunk did not apply."
+            exit 1
+          }
+          grep -q 'CL_COPY_MNT_NS BIT(25)' fs/namespace.c || {
+            echo "::error::SUSFS mount namespace flag is missing."
+            exit 1
+          }
+
+          # Explicitly disable SUSFS options whose kernel-API hunks are not ported.
+          sed -i -E '/^(# )?CONFIG_KSU_SUSFS_SUS_KSTAT(=| is not set$)/d' "$config"
+          sed -i -E '/^(# )?CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG(=| is not set$)/d' "$config"
+          sed -i -E '/^(# )?CONFIG_KSU_SUSFS_OPEN_REDIRECT(=| is not set$)/d' "$config"
+          sed -i -E '/^(# )?CONFIG_KSU_SUSFS_SUS_MAP(=| is not set$)/d' "$config"
+          sed -i -E '/^(# )?CONFIG_KSU_MANUAL_HOOK(=| is not set$)/d' "$config"
+          cat >> "$config" <<'EOF'
+          # CONFIG_KSU_SUSFS_SUS_KSTAT is not set
+          # CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG is not set
+          # CONFIG_KSU_SUSFS_OPEN_REDIRECT is not set
+          # CONFIG_KSU_SUSFS_SUS_MAP is not set
+          # CONFIG_KSU_MANUAL_HOOK is not set
+          EOF
+
+          for symbol in CONFIG_KSU=y CONFIG_KSU_SUSFS=y CONFIG_KSU_SUSFS_SUS_PATH=y CONFIG_KSU_SUSFS_SUS_MOUNT=y; do
+            grep -qx "$symbol" "$config" || {
+              echo "::error::Required SUSFS config missing: $symbol"
+              exit 1
+            }
+          done
+          if grep -qE '^CONFIG_KSU_SUSFS_(SUS_KSTAT|SPOOF_CMDLINE_OR_BOOTCONFIG|OPEN_REDIRECT|SUS_MAP)=y$' "$config"; then
+            echo "::error::An unported optional SUSFS feature was enabled."
+            exit 1
+          fi
+          if grep -q '^CONFIG_KSU_MANUAL_HOOK=y$' "$config"; then
+            echo "::error::Manual hooks conflict with SUSFS inline hooks."
+            exit 1
+          fi
+          if find . -type f -name '*.rej' -print -quit | grep -q .; then
+            echo "::error::Unresolved patch rejected hunks remain in the source tree."
+            exit 1
+          fi
+
+          echo "SUSFS core validated: path/mount hiding enabled; unported optional features disabled."
 
       - name: Compile kernel
         uses: ./.github/workflows/build-process
