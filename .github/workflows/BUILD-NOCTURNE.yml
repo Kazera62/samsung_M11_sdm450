@@ -180,8 +180,8 @@ jobs:
             exit 1
           }
 
-          printf -v CAPTION 'NOCTURNE // SDM450\nRoot: %s\nDefconfig: %s\nClang: %s\nCommit: %.7s' \
-            "$ROOT_MODE" "$DEFCONFIG_NAME" "$CLANG_PROFILE" "$GITHUB_SHA"
+          printf -v CAPTION 'NOCTURNE // SDM450\nKernel: %s\nRoot: %s\nDefconfig: %s\nClang: %s\nCommit: %.7s' \
+            "$KERNEL_NAME" "$ROOT_MODE" "$DEFCONFIG_NAME" "$CLANG_PROFILE" "$GITHUB_SHA"
 
           RESPONSE="$(curl --fail-with-body --silent --show-error --retry 2 --max-time 300 \
             --request POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
