@@ -132,26 +132,41 @@ jobs:
           ready = ready_path.read_text()
           ready = replace_once(
               ready,
-              "      - name: Set KernelSU\\n        shell: bash\\n",
-              "      - name: Set KernelSU\\n        if: env.ROOT_NAME != 'Non-root'\\n        shell: bash\\n",
+              """      - name: Set KernelSU
+        shell: bash
+""",
+              """      - name: Set KernelSU
+        if: env.ROOT_NAME != 'Non-root'
+        shell: bash
+""",
               "KernelSU setup step",
           )
           ready = replace_once(
               ready,
-              "      - name: SukiSU-Ultra Fixed\\n        shell: bash\\n",
-              "      - name: SukiSU-Ultra Fixed\\n        if: env.ROOT_NAME != 'Non-root' && env.KERNELSU_AUTO_FORK == 'sukisu'\\n        shell: bash\\n",
+              """      - name: SukiSU-Ultra Fixed
+        shell: bash
+""",
+              """      - name: SukiSU-Ultra Fixed
+        if: env.ROOT_NAME != 'Non-root' && env.KERNELSU_AUTO_FORK == 'sukisu'
+        shell: bash
+""",
               "SukiSU patch step",
           )
           ready = replace_once(
               ready,
-              '          if [[ "${{ env.KERNELSU_SOURCE }}" == *SukiSU* ]] || [[ "${{ env.KERNELSU_AUTO_FORK }}" == "sukisu" ]]; then',
-              '          if [[ "${{ env.KERNELSU_AUTO_FORK }}" == "sukisu" ]]; then',
+              '''          if [[ "${{ env.KERNELSU_SOURCE }}" == *SukiSU* ]] || [[ "${{ env.KERNELSU_AUTO_FORK }}" == "sukisu" ]]; then''',
+              '''          if [[ "${{ env.KERNELSU_AUTO_FORK }}" == "sukisu" ]]; then''',
               "SukiSU patch condition",
           )
           ready = replace_once(
               ready,
-              "      - name: Set KSU and SUSFS for DEFCONFIG\\n        shell: bash\\n",
-              "      - name: Set KSU and SUSFS for DEFCONFIG\\n        if: env.ROOT_NAME != 'Non-root'\\n        shell: bash\\n",
+              """      - name: Set KSU and SUSFS for DEFCONFIG
+        shell: bash
+""",
+              """      - name: Set KSU and SUSFS for DEFCONFIG
+        if: env.ROOT_NAME != 'Non-root'
+        shell: bash
+""",
               "root config step",
           )
           ready_path.write_text(ready)
@@ -164,21 +179,25 @@ jobs:
               "large-packages: false",
               "large package cleanup option",
           )
-          newer_marker = 'elif [ "${{ env.SYSTEM_VERSION }}" == "newer" ]; then'
-          arch_marker = 'elif [ "${{ env.SYSTEM_VERSION }}" == "arch" ]; then'
+          newer_marker = '''elif [ "${{ env.SYSTEM_VERSION }}" == "newer" ]; then'''
+          arch_marker = '''elif [ "${{ env.SYSTEM_VERSION }}" == "arch" ]; then'''
           section_start = env_text.index(newer_marker)
           section_end = env_text.index(arch_marker, section_start)
           newer_section = env_text[section_start:section_end]
-          coccinelle_start = newer_section.index("            # Install Coccinelle\\n")
-          coccinelle_end = newer_section.index("            # Install Libtinfo5\\n", coccinelle_start)
+          coccinelle_start = newer_section.index("""            # Install Coccinelle
+""")
+          coccinelle_end = newer_section.index("""            # Install Libtinfo5
+""", coccinelle_start)
           newer_section = (
               newer_section[:coccinelle_start]
-              + "            # Coccinelle is not used by this kernel build path; skip building it.\\n\\n"
+              + """            # Coccinelle is not used by this kernel build path; skip building it.
+
+"""
               + newer_section[coccinelle_end:]
           )
           env_text = env_text[:section_start] + newer_section + env_text[section_end:]
           env_path.write_text(env_text)
-          print("Adjusted framework: rootless skips KSU setup, SukiSU patch only runs for SukiSU, and slow optional cleanup/Coccinelle work is reduced.")
+          print("Framework tuned for SDM450: rootless skips KSU setup; SukiSU patch is fork-specific; optional cleanup and Coccinelle build are reduced.")
           PY
 
       - name: Prepare build environment
