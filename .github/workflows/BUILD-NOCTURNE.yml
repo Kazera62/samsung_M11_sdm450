@@ -130,45 +130,49 @@ jobs:
 
           ready_path = Path(".github/workflows/build-ready/action.yml")
           ready = ready_path.read_text()
-          ready = replace_once(
-              ready,
-              """      - name: Set KernelSU
-        shell: bash
-""",
-              """      - name: Set KernelSU
-        if: env.ROOT_NAME != 'Non-root'
-        shell: bash
-""",
-              "KernelSU setup step",
-          )
-          ready = replace_once(
-              ready,
-              """      - name: SukiSU-Ultra Fixed
-        shell: bash
-""",
-              """      - name: SukiSU-Ultra Fixed
-        if: env.ROOT_NAME != 'Non-root' && env.KERNELSU_AUTO_FORK == 'sukisu'
-        shell: bash
-""",
-              "SukiSU patch step",
-          )
-          ready = replace_once(
-              ready,
-              '''          if [[ "${{ env.KERNELSU_SOURCE }}" == *SukiSU* ]] || [[ "${{ env.KERNELSU_AUTO_FORK }}" == "sukisu" ]]; then''',
-              '''          if [[ "${{ env.KERNELSU_AUTO_FORK }}" == "sukisu" ]]; then''',
-              "SukiSU patch condition",
-          )
-          ready = replace_once(
-              ready,
-              """      - name: Set KSU and SUSFS for DEFCONFIG
-        shell: bash
-""",
-              """      - name: Set KSU and SUSFS for DEFCONFIG
-        if: env.ROOT_NAME != 'Non-root'
-        shell: bash
-""",
-              "root config step",
-          )
+
+          old_ksu = "\\n".join([
+              "      - name: Set KernelSU",
+              "        shell: bash",
+              "",
+          ])
+          new_ksu = "\\n".join([
+              "      - name: Set KernelSU",
+              "        if: env.ROOT_NAME != 'Non-root'",
+              "        shell: bash",
+              "",
+          ])
+          ready = replace_once(ready, old_ksu, new_ksu, "KernelSU setup step")
+
+          old_suki = "\\n".join([
+              "      - name: SukiSU-Ultra Fixed",
+              "        shell: bash",
+              "",
+          ])
+          new_suki = "\\n".join([
+              "      - name: SukiSU-Ultra Fixed",
+              "        if: env.ROOT_NAME != 'Non-root' && env.KERNELSU_AUTO_FORK == 'sukisu'",
+              "        shell: bash",
+              "",
+          ])
+          ready = replace_once(ready, old_suki, new_suki, "SukiSU patch step")
+
+          old_condition = '          if [[ "${{ env.KERNELSU_SOURCE }}" == *SukiSU* ]] || [[ "${{ env.KERNELSU_AUTO_FORK }}" == "sukisu" ]]; then'
+          new_condition = '          if [[ "${{ env.KERNELSU_AUTO_FORK }}" == "sukisu" ]]; then'
+          ready = replace_once(ready, old_condition, new_condition, "SukiSU patch condition")
+
+          old_config = "\\n".join([
+              "      - name: Set KSU and SUSFS for DEFCONFIG",
+              "        shell: bash",
+              "",
+          ])
+          new_config = "\\n".join([
+              "      - name: Set KSU and SUSFS for DEFCONFIG",
+              "        if: env.ROOT_NAME != 'Non-root'",
+              "        shell: bash",
+              "",
+          ])
+          ready = replace_once(ready, old_config, new_config, "root config step")
           ready_path.write_text(ready)
 
           env_path = Path(".github/workflows/build-env/action.yml")
@@ -179,20 +183,17 @@ jobs:
               "large-packages: false",
               "large package cleanup option",
           )
-          newer_marker = '''elif [ "${{ env.SYSTEM_VERSION }}" == "newer" ]; then'''
-          arch_marker = '''elif [ "${{ env.SYSTEM_VERSION }}" == "arch" ]; then'''
+
+          newer_marker = 'elif [ "${{ env.SYSTEM_VERSION }}" == "newer" ]; then'
+          arch_marker = 'elif [ "${{ env.SYSTEM_VERSION }}" == "arch" ]; then'
           section_start = env_text.index(newer_marker)
           section_end = env_text.index(arch_marker, section_start)
           newer_section = env_text[section_start:section_end]
-          coccinelle_start = newer_section.index("""            # Install Coccinelle
-""")
-          coccinelle_end = newer_section.index("""            # Install Libtinfo5
-""", coccinelle_start)
+          coccinelle_start = newer_section.index("            # Install Coccinelle\\n")
+          coccinelle_end = newer_section.index("            # Install Libtinfo5\\n", coccinelle_start)
           newer_section = (
               newer_section[:coccinelle_start]
-              + """            # Coccinelle is not used by this kernel build path; skip building it.
-
-"""
+              + "            # Coccinelle is not used by this kernel build path; skip building it.\\n\\n"
               + newer_section[coccinelle_end:]
           )
           env_text = env_text[:section_start] + newer_section + env_text[section_end:]
