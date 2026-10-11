@@ -305,13 +305,13 @@ jobs:
 
           printf 'AnyKernel3 source: %s (%s)\n' "$AK3_SOURCE" "$AK3_BRANCH"
 
-      - name: Apply KernelSU hook patch
-        if: inputs.root == 'ReSukiSU (tanpa SUSFS)'
-        uses: ./.github/workflows/patch-no-kprobe
-
       - name: Apply SUSFS patch for Samsung Linux 4.9
         if: inputs.root == 'ReSukiSU + SUSFS'
         uses: ./.github/workflows/patch-susfs
+
+      - name: Apply KernelSU hook patch
+        if: inputs.root != 'Non-root'
+        uses: ./.github/workflows/patch-no-kprobe
 
       - name: Validate SUSFS integration
         if: inputs.root == 'ReSukiSU + SUSFS'
