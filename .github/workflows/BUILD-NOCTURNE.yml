@@ -24,8 +24,7 @@ on:
         default: ReSukiSU + SUSFS
         options:
           - Non-root
-          - ReSukiSU + SUSFS
-          - SukiSU-Ultra + SUSFS
+          - ReSukiSU (tanpa SUSFS)
 
 permissions:
   contents: read
@@ -56,15 +55,13 @@ env:
 
   DEFCONFIG_NAME: "a11q_open_defconfig"
 
-  # The upstream framework uses BakaSU/SukiSU in automatic mode.
-  # ReSukiSU uses the framework's manual setup-script mode.
-  KERNELSU_AUTO_GET: "${{ inputs.root == 'ReSukiSU + SUSFS' && 'false' || 'true' }}"
-  KERNELSU_AUTO_FORK: "${{ inputs.root == 'SukiSU-Ultra + SUSFS' && 'sukisu' || 'bakasu' }}"
+  # ReSukiSU uses the setup script and manual hooks on this Linux 4.9 Non-GKI kernel.
+  KERNELSU_AUTO_GET: "${{ inputs.root == 'ReSukiSU (tanpa SUSFS)' && 'false' || 'true' }}"
   KERNELSU_SOURCE: "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh"
   KERNELSU_BRANCH: "main"
   KERNELSU_METHOD: "shell"
-  SUSFS_ENABLE: "${{ inputs.root != 'Non-root' && 'true' || 'false' }}"
-  SUSFS_FIXED: "false"
+  # SUSFS is disabled until its Linux 4.9 backport is validated.
+  SUSFS_ENABLE: "false"
 
   # Always use the user's own AnyKernel3 repository.
   AK3_SOURCE: "https://github.com/Kazera62/AnyKernel3.git"
@@ -76,8 +73,6 @@ env:
   HOOK_METHOD: "syscall"
 
   BUILD_DEBUGGER: "true"
-  # The upstream SUSFS reject handler is inverted; verify its archive below.
-  SKIP_PATCH: "true"
   FREE_MORE_SPACE: "true"
 
 jobs:
@@ -121,6 +116,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           def replace_once(source, old, new, label):
               count = source.count(old)
@@ -131,6 +127,7 @@ jobs:
           ready_path = Path(".github/workflows/build-ready/action.yml")
           ready = ready_path.read_text()
 
+          # Rootless builds must not install KernelSU.
           old_ksu = "\n".join([
               "      - name: Set KernelSU",
               "        shell: bash",
@@ -144,29 +141,14 @@ jobs:
           ])
           ready = replace_once(ready, old_ksu, new_ksu, "KernelSU setup step")
 
-          old_suki = "\n".join([
-              "      - name: SukiSU-Ultra Fixed",
-              "        shell: bash",
-              "",
-          ])
-          new_suki = "\n".join([
-              "      - name: SukiSU-Ultra Fixed",
-              "        if: env.ROOT_NAME != 'Non-root' && env.KERNELSU_AUTO_FORK == 'sukisu'",
-              "        shell: bash",
-              "",
-          ])
-          ready = replace_once(ready, old_suki, new_suki, "SukiSU patch step")
+          # Strip the unrelated fork-only patch stage by its patch filename marker.
+          parts = re.split(r'(?m)(?=^      - name: )', ready)
+          patch_steps = [part for part in parts if "fixed.patch" in part]
+          if len(patch_steps) != 1:
+              raise SystemExit(f"Expected one unrelated fixed patch step, found {len(patch_steps)}.")
+          ready = "".join(part for part in parts if "fixed.patch" not in part)
 
-          expression_prefix = "$" + "{{"
-          old_condition = (
-              '          if [[ "' + expression_prefix + ' env.KERNELSU_SOURCE }}" == *SukiSU* ]] || [["'
-              + expression_prefix + ' env.KERNELSU_AUTO_FORK }}" == "sukisu" ]]; then'
-          )
-          # Keep the upstream expression tokens literal while the workflow parses this script.
-          old_condition = old_condition.replace('|| [["', '|| [[ "')
-          new_condition = '          if [[ "' + expression_prefix + ' env.KERNELSU_AUTO_FORK }}" == "sukisu" ]]; then'
-          ready = replace_once(ready, old_condition, new_condition, "SukiSU patch condition")
-
+          # Do not append KSU configuration for Non-root builds.
           old_config = "\n".join([
               "      - name: Set KSU and SUSFS for DEFCONFIG",
               "        shell: bash",
@@ -181,6 +163,8 @@ jobs:
           ready = replace_once(ready, old_config, new_config, "root config step")
           ready_path.write_text(ready)
 
+          # Keep runner setup lighter: skip optional package purging and compilation
+          # of Coccinelle, which is not used by this build path.
           env_path = Path(".github/workflows/build-env/action.yml")
           env_text = env_path.read_text()
           env_text = replace_once(
@@ -190,6 +174,7 @@ jobs:
               "large package cleanup option",
           )
 
+          expression_prefix = "$" + "{{"
           newer_marker = 'elif [ "' + expression_prefix + ' env.SYSTEM_VERSION }}" == "newer" ]; then'
           arch_marker = 'elif [ "' + expression_prefix + ' env.SYSTEM_VERSION }}" == "arch" ]; then'
           section_start = env_text.index(newer_marker)
@@ -204,7 +189,7 @@ jobs:
           )
           env_text = env_text[:section_start] + newer_section + env_text[section_end:]
           env_path.write_text(env_text)
-          print("Framework tuned for SDM450: rootless skips KSU setup; SukiSU patch is fork-specific; optional cleanup and Coccinelle build are reduced.")
+          print("Framework tuned for this kernel; rootless setup and unrelated patch steps are skipped.")
           PY
 
       - name: Prepare build environment
@@ -242,6 +227,35 @@ jobs:
 
           echo "Non-root cleanup passed: no KernelSU integration remains."
 
+      - name: Configure ReSukiSU manual hooks
+        if: inputs.root == 'ReSukiSU (tanpa SUSFS)'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/device_kernel"
+
+          config="arch/arm64/configs/$DEFCONFIG_NAME"
+          test -s "$config" || {
+            echo "::error::Defconfig not found: $config"
+            exit 1
+          }
+
+          # Remove duplicate / stale KSU entries, then enable root with manual hooks only.
+          sed -i -E '/^(# )?CONFIG_KSU([A-Z0-9_]+)?(=| is not set$)/d' "$config"
+          cat >> "$config" <<'EOF'
+          CONFIG_KSU=y
+          CONFIG_KSU_MANUAL_HOOK=y
+          EOF
+
+          grep -qx 'CONFIG_KSU=y' "$config"
+          grep -qx 'CONFIG_KSU_MANUAL_HOOK=y' "$config"
+          if grep -qE '^(# )?CONFIG_KSU_SUSFS(_[A-Z0-9_]+)?(=| is not set$)' "$config"; then
+            echo "::error::SUSFS settings remain in the root defconfig."
+            exit 1
+          fi
+
+          echo "ReSukiSU manual hooks enabled; SUSFS remains disabled."
+
       - name: Use Kazera62 AnyKernel3
         shell: bash
         run: |
@@ -266,32 +280,8 @@ jobs:
 
           printf 'AnyKernel3 source: %s (%s)\n' "$AK3_SOURCE" "$AK3_BRANCH"
 
-      - name: Apply SUSFS
-        if: inputs.root != 'Non-root'
-        uses: ./.github/workflows/patch-susfs
-
-      - name: Validate SUSFS patch result
-        if: inputs.root != 'Non-root'
-        shell: bash
-        run: |
-          set -euo pipefail
-          reject_archive="$GITHUB_WORKSPACE/device_kernel/rej_files_1.5.5.tar.gz"
-
-          if [[ ! -s "$reject_archive" ]]; then
-            echo "::error::SUSFS reject archive was not generated; patch integrity cannot be verified."
-            exit 1
-          fi
-
-          if tar -tzf "$reject_archive" | grep -Eq '\.rej$'; then
-            echo "::error::SUSFS contains rejected patch hunks. See the patch_rejected_files artifact."
-            tar -tzf "$reject_archive" | grep -E '\.rej$' || true
-            exit 1
-          fi
-
-          echo "SUSFS validation passed: no rejected hunks found."
-
       - name: Apply KernelSU hook patch
-        if: inputs.root != 'Non-root'
+        if: inputs.root == 'ReSukiSU (tanpa SUSFS)'
         uses: ./.github/workflows/patch-no-kprobe
 
       - name: Compile kernel
