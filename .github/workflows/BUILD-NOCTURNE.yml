@@ -25,6 +25,55 @@ on:
         options:
           - Non-root
           - BakaSU + SUSFS
+      cpu_default_governor:
+        description: "Default CPU governor (options enabled in the current defconfig)"
+        required: true
+        type: choice
+        default: performance
+        options:
+          - performance
+          - powersave
+          - userspace
+          - ondemand
+          - conservative
+          - schedutil
+      io_default_scheduler:
+        description: "Default block I/O scheduler (options enabled in the current defconfig)"
+        required: true
+        type: choice
+        default: cfq
+        options:
+          - cfq
+          - noop
+      compression_algorithm:
+        description: "Default zRAM compression algorithm; boot image remains Image.gz-dtb"
+        required: true
+        type: choice
+        default: lz4
+        options:
+          - lz4
+          - lzo
+      tcp_default_congestion:
+        description: "Default TCP congestion-control algorithm supported by this defconfig"
+        required: true
+        type: choice
+        default: bic
+        options:
+          - bic
+          - cubic
+          - htcp
+          - westwood
+          - reno
+      config_hz:
+        description: "Kernel timer tick rate (CONFIG_HZ)"
+        required: true
+        type: choice
+        default: 100
+        options:
+          - 100
+          - 250
+          - 300
+          - 1000
 
 permissions:
   contents: read
@@ -37,6 +86,11 @@ env:
   # The workflow's selected Git ref is also the kernel source branch.
   KERNEL_BRANCH: "${{ github.ref_name }}"
   ROOT_NAME: "${{ inputs.root }}"
+  CPU_DEFAULT_GOVERNOR: "${{ inputs.cpu_default_governor }}"
+  IO_DEFAULT_SCHEDULER: "${{ inputs.io_default_scheduler }}"
+  ZRAM_COMPRESSION: "${{ inputs.compression_algorithm }}"
+  TCP_DEFAULT_CONGESTION: "${{ inputs.tcp_default_congestion }}"
+  CONFIG_HZ_VALUE: "${{ inputs.config_hz }}"
 
   # Required for this kernel's Samsung DTB and overlay generation.
   CUSTOM_CMDS: "CLANG_TRIPLE=aarch64-linux-gnu-"
