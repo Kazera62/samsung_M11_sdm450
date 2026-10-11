@@ -29,7 +29,6 @@ on:
 permissions:
   contents: read
 
-
 env:
   DEVICE_NAME: "samsung_m11"
   DEVICE_CODENAME: "m11q"
@@ -38,7 +37,7 @@ env:
   ROOT_NAME: "${{ inputs.root }}"
 
   CUSTOM_CMDS: "CLANG_TRIPLE=aarch64-linux-gnu-"
-  EXTRA_CMDS: "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/clang-custom/lib64 DTC_EXT=$GITHUB_WORKSPACE/device_kernel/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y LOCALVERSION=-${{ inputs.kernel_name }}"
+  EXTRA_CMDS: "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/clang-custom/lib64 DTC_EXT=$GITHUB_WORKSPACE/device_kernel/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y LOCALVERSION=-$KERNEL_NAME"
 
   KERNEL_SOURCE: "https://github.com/Kazera62/samsung_M11_sdm450.git"
   KERNEL_BRANCH: "${{ github.ref_name }}"
@@ -84,6 +83,17 @@ jobs:
       CCACHE_HARDLINK: "true"
 
     steps:
+      - name: Validate kernel name
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$KERNEL_NAME" =~ ^[A-Za-z0-9._-]{1,32}$ ]]; then
+            echo "::error::Nama kernel hanya boleh berisi huruf, angka, titik, underscore, dan minus (maksimal 32 karakter)."
+            exit 1
+          fi
+          echo "Kernel: $KERNEL_NAME"
+          echo "Root: $ROOT_NAME"
+
       - name: Checkout build framework
         uses: actions/checkout@v6
         with:
