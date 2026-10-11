@@ -1,162 +1,30 @@
 name: NOCTURNE // SDM450 Kernel Build
-run-name: "NOCTURNE | ${{ inputs.clang_profile }} | Root: ${{ inputs.kernelsu_fork }} | SUSFS: ${{ inputs.susfs_enable }} | Telegram: ${{ inputs.telegram_delivery }}"
+run-name: "${{ inputs.kernel_name }} | ${{ inputs.clang_profile }} | ${{ inputs.root_mode }}"
 
 on:
   workflow_dispatch:
     inputs:
+      kernel_name:
+        description: "Nama kernel; hanya huruf, angka, titik, underscore, dan tanda minus"
+        required: true
+        type: string
+        default: NOCTURNE
       clang_profile:
-        description: "Select the Clang toolchain"
+        description: "Pilih compiler Clang"
         required: true
         type: choice
         default: lineage-r416183b
         options:
           - lineage-r416183b
           - proton-clang
-      kernelsu_fork:
-        description: "Root implementation; with SUSFS enabled, use bakasu or sukisu"
+      root_mode:
+        description: "Pilih root biasa tanpa SUSFS atau root dengan SUSFS"
         required: true
         type: choice
-        default: bakasu
+        default: root-susfs
         options:
-          - bakasu
-          - sukisu
-          - next
-          - rsuntk
-          - xxksu
-      kernelsu_method:
-        description: "How the upstream builder integrates KernelSU"
-        required: true
-        type: choice
-        default: shell
-        options:
-          - shell
-          - manual
-          - only
-      susfs_enable:
-        description: "Enable SUSFS integration and patching"
-        required: true
-        type: choice
-        default: enabled
-        options:
-          - enabled
-          - disabled
-      patch_diagnostics:
-        description: "Report rejected SUSFS hunks, stop on conflicts, and analyze compile failures"
-        required: true
-        type: choice
-        default: enabled
-        options:
-          - enabled
-          - disabled
-      skip_patch:
-        description: "Allow compilation to continue even when the SUSFS patch has rejected hunks"
-        required: true
-        type: choice
-        default: disabled
-        options:
-          - disabled
-          - enabled
-      rekernel_enable:
-        description: "Apply optional Re:Kernel patches (may require cgroup support)"
-        required: true
-        type: choice
-        default: disabled
-        options:
-          - disabled
-          - enabled
-      droidspaces_enable:
-        description: "Apply optional Droidspaces patches; upstream warns they may conflict with SUSFS"
-        required: true
-        type: choice
-        default: disabled
-        options:
-          - disabled
-          - enabled
-      nomount_enable:
-        description: "Apply optional NoMount patches"
-        required: true
-        type: choice
-        default: disabled
-        options:
-          - disabled
-          - enabled
-      kpm_enable:
-        description: "Enable KPM support where supported by the selected root implementation"
-        required: true
-        type: choice
-        default: disabled
-        options:
-          - disabled
-          - enabled
-      kpm_inline:
-        description: "Enable inline KPM; requires KPM enabled and SukiSU-Ultra selected"
-        required: true
-        type: choice
-        default: disabled
-        options:
-          - disabled
-          - enabled
-      kpm_kpatch_next:
-        description: "Apply the optional KPatch-Next hook; requires KPM enabled"
-        required: true
-        type: choice
-        default: disabled
-        options:
-          - disabled
-          - enabled
-      baseband_guard_enable:
-        description: "Apply the optional Baseband Guard patch"
-        required: true
-        type: choice
-        default: disabled
-        options:
-          - disabled
-          - enabled
-      baseband_guard_boot:
-        description: "Enable Baseband Guard protection for the boot partition; requires Baseband Guard"
-        required: true
-        type: choice
-        default: disabled
-        options:
-          - disabled
-          - enabled
-      generate_dtb:
-        description: "Generate a standalone DTB from DTS files if needed; normally leave disabled for this device"
-        required: true
-        type: choice
-        default: disabled
-        options:
-          - disabled
-          - enabled
-      pack_kmodules:
-        description: "Package compiled .ko modules in the AnyKernel3 ZIP"
-        required: true
-        type: choice
-        default: disabled
-        options:
-          - disabled
-          - enabled
-      merge_config_files:
-        description: "Optional comma-separated config filenames relative to arch/arm64/configs; leave blank to disable"
-        required: false
-        type: string
-        default: ""
-      free_more_space:
-        description: "Enable upstream build workspace cleanup to free disk space"
-        required: true
-        type: choice
-        default: enabled
-        options:
-          - enabled
-          - disabled
-      telegram_delivery:
-        description: "Send the completed AnyKernel3 ZIP to Telegram"
-        required: true
-        type: choice
-        default: send
-        options:
-          - send
-          - skip
+          - root-no-susfs
+          - root-susfs
 
 permissions:
   contents: read
@@ -165,20 +33,19 @@ concurrency:
   group: nocturne-build-${{ github.ref }}
   cancel-in-progress: true
 
-# Latest upstream NonGKI build framework is checked out for each run.
-# Kernel source is built from the branch selected in the Actions UI.
 env:
   DEVICE_NAME: "samsung_m11"
   DEVICE_CODENAME: "m11q"
 
+  KERNEL_NAME: "${{ inputs.kernel_name }}"
+  ROOT_MODE: "${{ inputs.root_mode }}"
+
   CUSTOM_CMDS: "CLANG_TRIPLE=aarch64-linux-gnu-"
-  EXTRA_CMDS: "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/clang-custom/lib64 DTC_EXT=$GITHUB_WORKSPACE/device_kernel/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y"
+  EXTRA_CMDS: "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/clang-custom/lib64 DTC_EXT=$GITHUB_WORKSPACE/device_kernel/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y LOCALVERSION=-$KERNEL_NAME"
 
   KERNEL_SOURCE: "https://github.com/Kazera62/samsung_M11_sdm450.git"
   KERNEL_BRANCH: "${{ github.ref_name }}"
 
-  # Known reference toolchain for this Linux 4.9 family.
-  # The alternative is available as a selectable experimental preset.
   CLANG_SOURCE: "${{ inputs.clang_profile == 'proton-clang' && 'https://github.com/kdrag0n/proton-clang.git' || 'https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b.git' }}"
   CLANG_BRANCH: "${{ inputs.clang_profile == 'proton-clang' && 'master' || 'lineage-20.0' }}"
 
@@ -193,56 +60,54 @@ env:
   DEFCONFIG_ORIGIN_IMAGE: ""
   DEFCONFIG_FROM_BOOT: "false"
 
-  # Upstream builder's SUSFS-capable automatic root integration.
-  # Its current selector is "bakasu" (BakaSU / ReSukiSU lineage).
+  # Both root choices use the upstream BakaSU/ReSukiSU-lineage integration.
+  # The selected mode controls whether SUSFS is applied.
   KERNELSU_SOURCE: ""
   KERNELSU_BRANCH: ""
   KERNELSU_AUTO_GET: "true"
-  KERNELSU_AUTO_FORK: "${{ inputs.kernelsu_fork }}"
-  KERNELSU_METHOD: "${{ inputs.kernelsu_method }}"
-
-  SUSFS_ENABLE: "${{ inputs.susfs_enable == 'enabled' && 'true' || 'false' }}"
+  KERNELSU_AUTO_FORK: "bakasu"
+  KERNELSU_METHOD: "shell"
+  SUSFS_ENABLE: "${{ inputs.root_mode == 'root-susfs' && 'true' || 'false' }}"
   SUSFS_FIXED: "false"
   SUSFS_FOLDER_FIXED: ""
   SUSFS_PATCH_FIXED: ""
   PATCHES_SOURCE: ""
   PATCHES_BRANCH: ""
 
-  # Use the device-configured AnyKernel3 repository directly; do not patch it here.
   AK3_SOURCE: "https://github.com/Kazera62/AnyKernel3.git"
   AK3_BRANCH: "master"
   PACK_METHOD: "AnyKernel3"
-  PACK_KMODULES: "${{ inputs.pack_kmodules == 'enabled' && 'true' || 'false' }}"
+  PACK_KMODULES: "false"
 
   BOOT_SOURCE: ""
   NEED_DTBO: "false"
   NEED_SAFE_DTBO: "false"
-  GENERATE_DTB: "${{ inputs.generate_dtb == 'enabled' && 'true' || 'false' }}"
+  GENERATE_DTB: "false"
   GENERATE_CHIP: "qcom"
 
-  ROM_TEXT: "nocturne_sdm450"
+  ROM_TEXT: "${{ inputs.kernel_name }}"
   PYTHON_VERSION: "3"
   HOOK_METHOD: "syscall"
 
-  REKERNEL_ENABLE: "${{ inputs.rekernel_enable == 'enabled' && 'true' || 'false' }}"
-  DROIDSPACES_ENABLE: "${{ inputs.droidspaces_enable == 'enabled' && 'true' || 'false' }}"
-  NOMOUNT_ENABLE: "${{ inputs.nomount_enable == 'enabled' && 'true' || 'false' }}"
+  REKERNEL_ENABLE: "false"
+  DROIDSPACES_ENABLE: "false"
+  NOMOUNT_ENABLE: "false"
 
-  KPM_ENABLE: "${{ inputs.kpm_enable == 'enabled' && 'true' || 'false' }}"
-  KPM_INLINE: "${{ inputs.kpm_inline == 'enabled' && 'true' || 'false' }}"
-  KPM_KPATCH_NEXT: "${{ inputs.kpm_kpatch_next == 'enabled' && 'true' || 'false' }}"
+  KPM_ENABLE: "false"
+  KPM_INLINE: "false"
+  KPM_KPATCH_NEXT: "false"
   KPM_PATCH_SOURCE: "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU_patch/refs/heads/main/kpm/patch_linux"
 
-  BASEBAND_GUARD_ENABLE: "${{ inputs.baseband_guard_enable == 'enabled' && 'true' || 'false' }}"
-  BASEBAND_GUARD_BOOT: "${{ inputs.baseband_guard_boot == 'enabled' && 'true' || 'false' }}"
+  BASEBAND_GUARD_ENABLE: "false"
+  BASEBAND_GUARD_BOOT: "false"
 
-  BUILD_DEBUGGER: "${{ inputs.patch_diagnostics == 'enabled' && 'true' || 'false' }}"
-  SKIP_PATCH: "${{ inputs.skip_patch == 'enabled' && 'true' || 'false' }}"
+  # Keep diagnostics on and do not continue silently after rejected SUSFS hunks.
+  BUILD_DEBUGGER: "true"
+  SKIP_PATCH: "false"
 
-  BUILD_OTHER_CONFIG: "${{ inputs.merge_config_files != '' && 'true' || 'false' }}"
-  MERGE_CONFIG_FILES: "${{ inputs.merge_config_files }}"
-
-  FREE_MORE_SPACE: "${{ inputs.free_more_space == 'enabled' && 'true' || 'false' }}"
+  BUILD_OTHER_CONFIG: "false"
+  MERGE_CONFIG_FILES: ""
+  FREE_MORE_SPACE: "true"
 
 jobs:
   build:
@@ -255,40 +120,25 @@ jobs:
       CCACHE_HARDLINK: "true"
 
     steps:
-      - name: Checkout upstream NonGKI build framework
+      - name: Checkout upstream build framework
         uses: actions/checkout@v6
         with:
           repository: JackA1ltman/NonGKI_Kernel_Build_2nd
           ref: mainline
           persist-credentials: false
-      - name: Validate build option dependencies
+
+      - name: Validate kernel name
         shell: bash
         run: |
           set -euo pipefail
-          echo "KernelSU fork: $KERNELSU_AUTO_FORK | SUSFS: $SUSFS_ENABLE"
-          echo "KPM: $KPM_ENABLE | Inline: $KPM_INLINE | KPatch-Next: $KPM_KPATCH_NEXT"
-          echo "Baseband Guard: $BASEBAND_GUARD_ENABLE | boot protection: $BASEBAND_GUARD_BOOT"
-
-          if [[ "$SUSFS_ENABLE" == "true" && "$KERNELSU_AUTO_FORK" != "bakasu" && "$KERNELSU_AUTO_FORK" != "sukisu" ]]; then
-            echo "::error::The upstream framework supports SUSFS with bakasu or sukisu only. Select one of those forks or disable SUSFS."
+          if [[ ! "$KERNEL_NAME" =~ ^[A-Za-z0-9._-]{1,32}$ ]]; then
+            echo "::error::Invalid kernel name. Use 1-32 letters, numbers, dots, underscores, or hyphens."
             exit 1
           fi
-          if [[ "$KPM_ENABLE" == "true" && "$KPM_INLINE" != "true" && "$KPM_KPATCH_NEXT" != "true" ]]; then
-            echo "::error::KPM is enabled without an active KPM mode. Enable Inline KPM or KPatch-Next, or disable KPM."
-            exit 1
-          fi
-          if [[ "$KPM_INLINE" == "true" && ( "$KPM_ENABLE" != "true" || "$KERNELSU_AUTO_FORK" != "sukisu" ) ]]; then
-            echo "::error::Inline KPM requires KPM enabled and the sukisu (SukiSU-Ultra) fork."
-            exit 1
-          fi
-          if [[ "$KPM_KPATCH_NEXT" == "true" && "$KPM_ENABLE" != "true" ]]; then
-            echo "::error::KPatch-Next requires KPM enabled."
-            exit 1
-          fi
-          if [[ "$BASEBAND_GUARD_BOOT" == "true" && "$BASEBAND_GUARD_ENABLE" != "true" ]]; then
-            echo "::error::Boot partition protection requires Baseband Guard enabled."
-            exit 1
-          fi
+          echo "Kernel name: $KERNEL_NAME"
+          echo "Root mode: $ROOT_MODE"
+          echo "SUSFS: $SUSFS_ENABLE"
+          echo "Defconfig: $DEFCONFIG_NAME"
 
       - name: Prepare build environment
         uses: ./.github/workflows/build-env
@@ -302,37 +152,6 @@ jobs:
       - name: Apply no-kprobe compatibility patch
         uses: ./.github/workflows/patch-no-kprobe
 
-      - name: Device-specific build validation
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$GITHUB_WORKSPACE/device_kernel"
-          echo "Target: Samsung Galaxy M11 / A11 (SDM450)"
-          echo "Defconfig: $DEFCONFIG_NAME"
-          echo "KernelSU fork: $KERNELSU_AUTO_FORK | method: $KERNELSU_METHOD"
-          echo "SUSFS: $SUSFS_ENABLE | Clang: ${{ inputs.clang_profile }}"
-          echo "Re:Kernel: $REKERNEL_ENABLE | Droidspaces: $DROIDSPACES_ENABLE | NoMount: $NOMOUNT_ENABLE"
-          echo "KPM: $KPM_ENABLE | modules: $PACK_KMODULES | free space: $FREE_MORE_SPACE"
-          echo "Upstream builder: $(git -C "$GITHUB_WORKSPACE" rev-parse --short HEAD)"
-          test -f "arch/arm64/configs/$DEFCONFIG_NAME"
-          if [[ -n "$MERGE_CONFIG_FILES" ]]; then
-            IFS=',' read -ra CONFIG_LIST <<< "$MERGE_CONFIG_FILES"
-            for config in "${CONFIG_LIST[@]}"; do
-              test -f "arch/arm64/configs/$config" || { echo "::error::Config file not found: arch/arm64/configs/$config"; exit 1; }
-            done
-          fi
-      - name: Optional Re-Kernel patches
-        uses: ./.github/workflows/patch-rekernel
-
-      - name: Optional Droidspaces patches
-        uses: ./.github/workflows/patch-droidspaces
-
-      - name: Optional Baseband Guard patches
-        uses: ./.github/workflows/patch-baseband-guard
-
-      - name: Optional NoMount patches
-        uses: ./.github/workflows/patch-nomount
-
       - name: Compile kernel
         uses: ./.github/workflows/build-process
 
@@ -343,7 +162,6 @@ jobs:
         uses: ./.github/workflows/upload-files
 
       - name: Send kernel ZIP to Telegram
-        if: ${{ inputs.telegram_delivery == 'send' }}
         shell: bash
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -362,8 +180,8 @@ jobs:
             exit 1
           }
 
-          printf -v CAPTION 'NOCTURNE // SDM450\nReSukiSU + SUSFS\nDefconfig: %s\nClang: %s\nCommit: %.7s' \
-            "$DEFCONFIG_NAME" "$CLANG_PROFILE" "$GITHUB_SHA"
+          printf -v CAPTION 'NOCTURNE // SDM450\nRoot: %s\nDefconfig: %s\nClang: %s\nCommit: %.7s' \
+            "$ROOT_MODE" "$DEFCONFIG_NAME" "$CLANG_PROFILE" "$GITHUB_SHA"
 
           RESPONSE="$(curl --fail-with-body --silent --show-error --retry 2 --max-time 300 \
             --request POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
@@ -379,4 +197,3 @@ jobs:
               sys.exit(1)
           print("Telegram accepted the kernel ZIP.")
           '
-
