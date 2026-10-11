@@ -67,14 +67,9 @@ env:
   AK3_BRANCH: "master"
   PACK_METHOD: "AnyKernel3"
   PACK_KMODULES: "false"
-
-
   ROM_TEXT: "${{ inputs.kernel_name }}"
   PYTHON_VERSION: "3"
   HOOK_METHOD: "syscall"
-
-
-
 
   BUILD_DEBUGGER: "true"
   SKIP_PATCH: "false"
