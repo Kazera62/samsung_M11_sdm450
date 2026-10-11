@@ -4,31 +4,31 @@ Kernel project for Samsung Galaxy M11 / A11 (Snapdragon 450).
 
 ## Build
 
-Open **Actions → NOCTURNE // SDM450 Kernel Build → Run workflow**.
+Buka **Actions → NOCTURNE // SDM450 Kernel Build → Run workflow**.
 
-The workflow has only three inputs:
+Menu build hanya berisi tiga pilihan:
 
-| Input | Options | Default |
+| Menu | Pilihan | Default |
 |---|---|---|
-| Kernel name | Custom name, 1–32 letters/numbers/periods/underscores/hyphens | `NOCTURNE` |
-| Clang | LineageOS Clang r416183b, Proton Clang | LineageOS Clang r416183b |
-| Root mode | `root-no-susfs`, `root-susfs` | `root-susfs` |
+| Kernel name | Nama kernel kustom | `NOCTURNE` |
+| Clang | Clang r416183b, Proton Clang | Clang r416183b |
+| Root | ReSukiSU + SUSFS, SukiSU-Ultra + SUSFS | ReSukiSU + SUSFS |
 
-The kernel name is applied as the Linux kernel release suffix and ZIP filename label. The kernel defconfig is fixed to `a11q_open_defconfig).
+SUSFS selalu aktif. Pilihan root menentukan root yang dipasang; tidak ada pilihan root tanpa SUSFS. Defconfig tetap `a11q_open_defconfig`.
 
-Both root modes use the upstream BakaSU integration (ReSukiSU lineage). `root-no-susfs` builds root support without SUSFS; `root-susfs` enables the upstream SUSFS patch and configuration. SUSFS patch conflicts stop the build rather than being silently ignored.
+Pilihan ReSukiSU menggunakan repo yang sekarang bernama BakaSU. Pilihan SukiSU-Ultra menggunakan integrasi SukiSU-Ultra dari build framework.
 
-The workflow uses [NonGKI_Kernel_Build_2nd](https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd) and gets the packaging files from [Kazera62/AnyKernel3](https://github.com/Kazera62/AnyKernel3). The device-specific AnyKernel3 installer is maintained in that repository and is packaged without modifying it in this workflow.
+Workflow mengambil [NonGKI_Kernel_Build_2nd](https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd) untuk proses build dan menggunakan [Kazera62/AnyKernel3](https://github.com/Kazera62/AnyKernel3) langsung untuk packaging.
 
-## Telegram ZIP delivery
+## Telegram
 
-Add these repository secrets under **Settings → Secrets and variables → Actions**:
+Atur secret repository berikut di **Settings → Secrets and variables → Actions**:
 
-- `TELEGRAM_BOT_TOKEN`: your bot token.
-- `TELEGRAM_CHAT_ID`: destination chat or channel ID. The bot needs permission to send documents.
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
 
-The built ZIP is uploaded as a GitHub Actions artifact before the workflow attempts to send it to Telegram.
+ZIP diunggah sebagai GitHub Actions artifact sebelum dikirim ke Telegram.
 
-## Testing notice
+## Catatan
 
-A successful compilation does not guarantee that every M11/A11 variant will boot. Keep a known-good boot image and recovery method available before flashing a custom kernel.
+Build baru tetap perlu diuji pada perangkat sebelum digunakan sehari-hari. Simpan boot image yang diketahui berfungsi dan metode pemulihan sebelum flashing.
