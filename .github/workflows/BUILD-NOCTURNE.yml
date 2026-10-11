@@ -366,91 +366,91 @@ jobs:
           process = process_path.read_text()
           config_validation_marker = "          # KPM Detect\n"
           config_validation_hook = r'''          # Validate the final Kconfig output before any kernel compilation.
-          config="$GITHUB_WORKSPACE/device_kernel/out/.config"
-          if [[ ! -s "$config" ]]; then
-            echo "::error::Final kernel .config was not generated; refusing to compile."
-            exit 1
-          fi
+                    config="$GITHUB_WORKSPACE/device_kernel/out/.config"
+                    if [[ ! -s "$config" ]]; then
+                      echo "::error::Final kernel .config was not generated; refusing to compile."
+                      exit 1
+                    fi
 
-          require_config() {
-            if ! grep -Fqx -- "$1" "$config"; then
-              echo "::error::Kconfig rejected selected option: $1"
-              exit 1
-            fi
-          }
+                    require_config() {
+                      if ! grep -Fqx -- "$1" "$config"; then
+                        echo "::error::Kconfig rejected selected option: $1"
+                        exit 1
+                      fi
+                    }
 
-          case "$CPU_DEFAULT_GOVERNOR" in
-            performance|powersave|userspace|ondemand|conservative|schedutil) cpu_gov_upper="$(printf '%s' "$CPU_DEFAULT_GOVERNOR" | tr '[:lower:]' '[:upper:]')" ;;
-            *) echo "::error::Invalid CPU governor selection: $CPU_DEFAULT_GOVERNOR"; exit 1 ;;
-          esac
-          require_config "CONFIG_CPU_FREQ_GOV_$cpu_gov_upper=y"
-          require_config "CONFIG_CPU_FREQ_DEFAULT_GOV_$cpu_gov_upper=y"
-          cpu_gov_count="$(grep -Ec '^CONFIG_CPU_FREQ_DEFAULT_GOV_[A-Z0-9_]+=y$' "$config" || true)"
-          if [[ "$cpu_gov_count" != "1" ]]; then
-            echo "::error::Expected exactly one enabled default CPU governor, found $cpu_gov_count."
-            exit 1
-          fi
+                    case "$CPU_DEFAULT_GOVERNOR" in
+                      performance|powersave|userspace|ondemand|conservative|schedutil) cpu_gov_upper="$(printf '%s' "$CPU_DEFAULT_GOVERNOR" | tr '[:lower:]' '[:upper:]')" ;;
+                      *) echo "::error::Invalid CPU governor selection: $CPU_DEFAULT_GOVERNOR"; exit 1 ;;
+                    esac
+                    require_config "CONFIG_CPU_FREQ_GOV_$cpu_gov_upper=y"
+                    require_config "CONFIG_CPU_FREQ_DEFAULT_GOV_$cpu_gov_upper=y"
+                    cpu_gov_count="$(grep -Ec '^CONFIG_CPU_FREQ_DEFAULT_GOV_[A-Z0-9_]+=y$' "$config" || true)"
+                    if [[ "$cpu_gov_count" != "1" ]]; then
+                      echo "::error::Expected exactly one enabled default CPU governor, found $cpu_gov_count."
+                      exit 1
+                    fi
 
-          case "$IO_DEFAULT_SCHEDULER" in
-            cfq|noop) io_upper="$(printf '%s' "$IO_DEFAULT_SCHEDULER" | tr '[:lower:]' '[:upper:]')" ;;
-            *) echo "::error::Invalid I/O scheduler selection: $IO_DEFAULT_SCHEDULER"; exit 1 ;;
-          esac
-          require_config "CONFIG_IOSCHED_$io_upper=y"
-          require_config "CONFIG_DEFAULT_$io_upper=y"
-          require_config "CONFIG_DEFAULT_IOSCHED=\"$IO_DEFAULT_SCHEDULER\""
-          io_count="$(grep -Ec '^CONFIG_DEFAULT_(DEADLINE|CFQ|NOOP)=y$' "$config" || true)"
-          if [[ "$io_count" != "1" ]]; then
-            echo "::error::Expected exactly one default I/O scheduler, found $io_count."
-            exit 1
-          fi
+                    case "$IO_DEFAULT_SCHEDULER" in
+                      cfq|noop) io_upper="$(printf '%s' "$IO_DEFAULT_SCHEDULER" | tr '[:lower:]' '[:upper:]')" ;;
+                      *) echo "::error::Invalid I/O scheduler selection: $IO_DEFAULT_SCHEDULER"; exit 1 ;;
+                    esac
+                    require_config "CONFIG_IOSCHED_$io_upper=y"
+                    require_config "CONFIG_DEFAULT_$io_upper=y"
+                    require_config "CONFIG_DEFAULT_IOSCHED=\"$IO_DEFAULT_SCHEDULER\""
+                    io_count="$(grep -Ec '^CONFIG_DEFAULT_(DEADLINE|CFQ|NOOP)=y$' "$config" || true)"
+                    if [[ "$io_count" != "1" ]]; then
+                      echo "::error::Expected exactly one default I/O scheduler, found $io_count."
+                      exit 1
+                    fi
 
-          case "$TCP_DEFAULT_CONGESTION" in
-            bic|cubic|htcp|westwood|reno) tcp_lower="$TCP_DEFAULT_CONGESTION"; tcp_upper="$(printf '%s' "$tcp_lower" | tr '[:lower:]' '[:upper:]')" ;;
-            *) echo "::error::Invalid TCP congestion selection: $TCP_DEFAULT_CONGESTION"; exit 1 ;;
-          esac
-          if [[ "$tcp_lower" != "reno" ]]; then
-            require_config "CONFIG_TCP_CONG_$tcp_upper=y"
-          fi
-          require_config "CONFIG_DEFAULT_$tcp_upper=y"
-          require_config "CONFIG_DEFAULT_TCP_CONG=\"$tcp_lower\""
-          tcp_count="$(grep -Ec '^CONFIG_DEFAULT_(BIC|CUBIC|HTCP|HYBLA|VEGAS|VENO|WESTWOOD|DCTCP|CDG|BBR|RENO)=y$' "$config" || true)"
-          if [[ "$tcp_count" != "1" ]]; then
-            echo "::error::Expected exactly one default TCP congestion algorithm, found $tcp_count."
-            exit 1
-          fi
+                    case "$TCP_DEFAULT_CONGESTION" in
+                      bic|cubic|htcp|westwood|reno) tcp_lower="$TCP_DEFAULT_CONGESTION"; tcp_upper="$(printf '%s' "$tcp_lower" | tr '[:lower:]' '[:upper:]')" ;;
+                      *) echo "::error::Invalid TCP congestion selection: $TCP_DEFAULT_CONGESTION"; exit 1 ;;
+                    esac
+                    if [[ "$tcp_lower" != "reno" ]]; then
+                      require_config "CONFIG_TCP_CONG_$tcp_upper=y"
+                    fi
+                    require_config "CONFIG_DEFAULT_$tcp_upper=y"
+                    require_config "CONFIG_DEFAULT_TCP_CONG=\"$tcp_lower\""
+                    tcp_count="$(grep -Ec '^CONFIG_DEFAULT_(BIC|CUBIC|HTCP|HYBLA|VEGAS|VENO|WESTWOOD|DCTCP|CDG|BBR|RENO)=y$' "$config" || true)"
+                    if [[ "$tcp_count" != "1" ]]; then
+                      echo "::error::Expected exactly one default TCP congestion algorithm, found $tcp_count."
+                      exit 1
+                    fi
 
-          case "$CONFIG_HZ_VALUE" in
-            100|250|300|1000) ;;
-            *) echo "::error::Invalid CONFIG_HZ selection: $CONFIG_HZ_VALUE"; exit 1 ;;
-          esac
-          require_config "CONFIG_HZ_$CONFIG_HZ_VALUE=y"
-          require_config "CONFIG_HZ=$CONFIG_HZ_VALUE"
-          hz_count="$(grep -Ec '^CONFIG_HZ_[0-9]+=y$' "$config" || true)"
-          if [[ "$hz_count" != "1" ]]; then
-            echo "::error::Expected exactly one enabled CONFIG_HZ choice, found $hz_count."
-            exit 1
-          fi
+                    case "$CONFIG_HZ_VALUE" in
+                      100|250|300|1000) ;;
+                      *) echo "::error::Invalid CONFIG_HZ selection: $CONFIG_HZ_VALUE"; exit 1 ;;
+                    esac
+                    require_config "CONFIG_HZ_$CONFIG_HZ_VALUE=y"
+                    require_config "CONFIG_HZ=$CONFIG_HZ_VALUE"
+                    hz_count="$(grep -Ec '^CONFIG_HZ_[0-9]+=y$' "$config" || true)"
+                    if [[ "$hz_count" != "1" ]]; then
+                      echo "::error::Expected exactly one enabled CONFIG_HZ choice, found $hz_count."
+                      exit 1
+                    fi
 
-          case "$ZRAM_COMPRESSION" in
-            lzo|lz4) zram_upper="$(printf '%s' "$ZRAM_COMPRESSION" | tr '[:lower:]' '[:upper:]')" ;;
-            *) echo "::error::Invalid zRAM compression selection: $ZRAM_COMPRESSION"; exit 1 ;;
-          esac
-          require_config "CONFIG_ZRAM=y"
-          require_config "CONFIG_CRYPTO_$zram_upper=y"
-          zram_driver="$GITHUB_WORKSPACE/device_kernel/drivers/block/zram/zram_drv.c"
-          if ! grep -Fqx "static const char *default_compressor = \"$ZRAM_COMPRESSION\";" "$zram_driver"; then
-            echo "::error::Selected zRAM compressor was not retained in zram_drv.c."
-            exit 1
-          fi
-          compression_count="$(grep -Ec '^static const char [*]default_compressor = "(lzo|lz4)";$' "$zram_driver" || true)"
-          if [[ "$compression_count" != "1" ]]; then
-            echo "::error::Expected exactly one supported zRAM default compressor declaration, found $compression_count."
-            exit 1
-          fi
+                    case "$ZRAM_COMPRESSION" in
+                      lzo|lz4) zram_upper="$(printf '%s' "$ZRAM_COMPRESSION" | tr '[:lower:]' '[:upper:]')" ;;
+                      *) echo "::error::Invalid zRAM compression selection: $ZRAM_COMPRESSION"; exit 1 ;;
+                    esac
+                    require_config "CONFIG_ZRAM=y"
+                    require_config "CONFIG_CRYPTO_$zram_upper=y"
+                    zram_driver="$GITHUB_WORKSPACE/device_kernel/drivers/block/zram/zram_drv.c"
+                    if ! grep -Fqx "static const char *default_compressor = \"$ZRAM_COMPRESSION\";" "$zram_driver"; then
+                      echo "::error::Selected zRAM compressor was not retained in zram_drv.c."
+                      exit 1
+                    fi
+                    compression_count="$(grep -Ec '^static const char [*]default_compressor = "(lzo|lz4)";$' "$zram_driver" || true)"
+                    if [[ "$compression_count" != "1" ]]; then
+                      echo "::error::Expected exactly one supported zRAM default compressor declaration, found $compression_count."
+                      exit 1
+                    fi
 
-          echo "Kernel default selections validated against out/.config and zram_drv.c."
-          # KPM Detect
-'''
+                    echo "Kernel default selections validated against out/.config and zram_drv.c."
+                    # KPM Detect
+          '''
           process = replace_once(process, config_validation_marker, config_validation_hook, "post-defconfig option-validation hook")
           process_path.write_text(process)
           print("Framework actions adjusted: rootless setup is skipped, SUSFS compatibility is inline, and selected kernel defaults are validated.")
