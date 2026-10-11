@@ -68,12 +68,12 @@ on:
         description: "Kernel timer tick rate (CONFIG_HZ)"
         required: true
         type: choice
-        default: 100
+        default: "100"
         options:
-          - 100
-          - 250
-          - 300
-          - 1000
+          - "100"
+          - "250"
+          - "300"
+          - "1000"
 
 permissions:
   contents: read
