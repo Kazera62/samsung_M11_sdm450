@@ -101,17 +101,6 @@ jobs:
           ref: mainline
           persist-credentials: false
 
-      - name: Validate kernel name
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ ! "$KERNEL_NAME" =~ ^[A-Za-z0-9._-]{1,32}$ ]]; then
-            echo "::error::Nama kernel hanya boleh berisi huruf, angka, titik, underscore, dan minus (maksimal 32 karakter)."
-            exit 1
-          fi
-          echo "Kernel: $KERNEL_NAME"
-          echo "Root: $ROOT_NAME"
-
       - name: Prepare environment
         uses: ./.github/workflows/build-env
 
