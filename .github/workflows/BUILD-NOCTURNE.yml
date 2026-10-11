@@ -157,8 +157,14 @@ jobs:
           ])
           ready = replace_once(ready, old_suki, new_suki, "SukiSU patch step")
 
-          old_condition = '          if [[ "${{ env.KERNELSU_SOURCE }}" == *SukiSU* ]] || [[ "${{ env.KERNELSU_AUTO_FORK }}" == "sukisu" ]]; then'
-          new_condition = '          if [[ "${{ env.KERNELSU_AUTO_FORK }}" == "sukisu" ]]; then'
+          expression_prefix = "$" + "{{"
+          old_condition = (
+              '          if [[ "' + expression_prefix + ' env.KERNELSU_SOURCE }}" == *SukiSU* ]] || [["'
+              + expression_prefix + ' env.KERNELSU_AUTO_FORK }}" == "sukisu" ]]; then'
+          )
+          # Keep the upstream expression tokens literal while the workflow parses this script.
+          old_condition = old_condition.replace('|| [["', '|| [[ "')
+          new_condition = '          if [[ "' + expression_prefix + ' env.KERNELSU_AUTO_FORK }}" == "sukisu" ]]; then'
           ready = replace_once(ready, old_condition, new_condition, "SukiSU patch condition")
 
           old_config = "\n".join([
@@ -184,8 +190,8 @@ jobs:
               "large package cleanup option",
           )
 
-          newer_marker = 'elif [ "${{ env.SYSTEM_VERSION }}" == "newer" ]; then'
-          arch_marker = 'elif [ "${{ env.SYSTEM_VERSION }}" == "arch" ]; then'
+          newer_marker = 'elif [ "' + expression_prefix + ' env.SYSTEM_VERSION }}" == "newer" ]; then'
+          arch_marker = 'elif [ "' + expression_prefix + ' env.SYSTEM_VERSION }}" == "arch" ]; then'
           section_start = env_text.index(newer_marker)
           section_end = env_text.index(arch_marker, section_start)
           newer_section = env_text[section_start:section_end]
