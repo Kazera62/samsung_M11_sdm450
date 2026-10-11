@@ -115,6 +115,72 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
+      - name: Tune upstream actions for this kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(source, old, new, label):
+              count = source.count(old)
+              if count != 1:
+                  raise SystemExit(f"Expected exactly one {label}, found {count}.")
+              return source.replace(old, new, 1)
+
+          ready_path = Path(".github/workflows/build-ready/action.yml")
+          ready = ready_path.read_text()
+          ready = replace_once(
+              ready,
+              "      - name: Set KernelSU\\n        shell: bash\\n",
+              "      - name: Set KernelSU\\n        if: env.ROOT_NAME != 'Non-root'\\n        shell: bash\\n",
+              "KernelSU setup step",
+          )
+          ready = replace_once(
+              ready,
+              "      - name: SukiSU-Ultra Fixed\\n        shell: bash\\n",
+              "      - name: SukiSU-Ultra Fixed\\n        if: env.ROOT_NAME != 'Non-root' && env.KERNELSU_AUTO_FORK == 'sukisu'\\n        shell: bash\\n",
+              "SukiSU patch step",
+          )
+          ready = replace_once(
+              ready,
+              '          if [[ "${{ env.KERNELSU_SOURCE }}" == *SukiSU* ]] || [[ "${{ env.KERNELSU_AUTO_FORK }}" == "sukisu" ]]; then',
+              '          if [[ "${{ env.KERNELSU_AUTO_FORK }}" == "sukisu" ]]; then',
+              "SukiSU patch condition",
+          )
+          ready = replace_once(
+              ready,
+              "      - name: Set KSU and SUSFS for DEFCONFIG\\n        shell: bash\\n",
+              "      - name: Set KSU and SUSFS for DEFCONFIG\\n        if: env.ROOT_NAME != 'Non-root'\\n        shell: bash\\n",
+              "root config step",
+          )
+          ready_path.write_text(ready)
+
+          env_path = Path(".github/workflows/build-env/action.yml")
+          env_text = env_path.read_text()
+          env_text = replace_once(
+              env_text,
+              "large-packages: true",
+              "large-packages: false",
+              "large package cleanup option",
+          )
+          newer_marker = 'elif [ "${{ env.SYSTEM_VERSION }}" == "newer" ]; then'
+          arch_marker = 'elif [ "${{ env.SYSTEM_VERSION }}" == "arch" ]; then'
+          section_start = env_text.index(newer_marker)
+          section_end = env_text.index(arch_marker, section_start)
+          newer_section = env_text[section_start:section_end]
+          coccinelle_start = newer_section.index("            # Install Coccinelle\\n")
+          coccinelle_end = newer_section.index("            # Install Libtinfo5\\n", coccinelle_start)
+          newer_section = (
+              newer_section[:coccinelle_start]
+              + "            # Coccinelle is not used by this kernel build path; skip building it.\\n\\n"
+              + newer_section[coccinelle_end:]
+          )
+          env_text = env_text[:section_start] + newer_section + env_text[section_end:]
+          env_path.write_text(env_text)
+          print("Adjusted framework: rootless skips KSU setup, SukiSU patch only runs for SukiSU, and slow optional cleanup/Coccinelle work is reduced.")
+          PY
+
       - name: Prepare build environment
         uses: ./.github/workflows/build-env
 
@@ -156,9 +222,16 @@ jobs:
           set -euo pipefail
           installer="$GITHUB_WORKSPACE/device_kernel/AnyKernel3"
 
-          # Replace any bundled installer so the package always uses this repo.
-          rm -rf "$installer"
-          git clone --depth=1 --branch "$AK3_BRANCH" "$AK3_SOURCE" "$installer"
+          # The framework already clones AK3_SOURCE for this configuration.
+          # Only replace it if the checked-out origin is not the user's repository.
+          remote=""
+          if [[ -d "$installer/.git" ]]; then
+            remote="$(git -C "$installer" remote get-url origin 2>/dev/null || true)"
+          fi
+          if [[ "${remote%.git}" != "${AK3_SOURCE%.git}" ]]; then
+            rm -rf "$installer"
+            git clone --depth=1 --branch "$AK3_BRANCH" "$AK3_SOURCE" "$installer"
+          fi
 
           test -s "$installer/anykernel.sh" || {
             echo "::error::AnyKernel3 repository is missing anykernel.sh."
