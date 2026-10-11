@@ -171,19 +171,20 @@ jobs:
           # The framework hardcodes BakaSU to main. Preserve KERNELSU_BRANCH so
           # SUSFS mode can pin a compatible BakaSU commit while still using the
           # framework's official bakasu setup path and bundled SUSFS patch.
-          old_bakasu = "\\n".join([
-              '            elif [[ "${{ env.KERNELSU_AUTO_FORK }}" == "bakasu" ]]; then',
+          expression_prefix = "$" + "{{"
+          old_bakasu = "\n".join([
+              '            elif [[ "' + expression_prefix + ' env.KERNELSU_AUTO_FORK }}" == "bakasu" ]]; then',
               '                KERNELSU_AUTHOR="Baka-SU"',
               '                KERNELSU_NAME="BakaSU"',
               '                KERNELSU_ORIGIN_BRANCH="main"',
-              '                if [[ "${{ env.SUSFS_ENABLE }}" == "true" ]]; then',
+              '                if [[ "' + expression_prefix + ' env.SUSFS_ENABLE }}" == "true" ]]; then',
               '                    KERNELSU_BRANCH="main"',
               '                else',
               '                    KERNELSU_BRANCH="main"',
               '                fi',
           ])
-          new_bakasu = "\\n".join([
-              '            elif [[ "${{ env.KERNELSU_AUTO_FORK }}" == "bakasu" ]]; then',
+          new_bakasu = "\n".join([
+              '            elif [[ "' + expression_prefix + ' env.KERNELSU_AUTO_FORK }}" == "bakasu" ]]; then',
               '                KERNELSU_AUTHOR="Baka-SU"',
               '                KERNELSU_NAME="BakaSU"',
               '                KERNELSU_ORIGIN_BRANCH="main"',
