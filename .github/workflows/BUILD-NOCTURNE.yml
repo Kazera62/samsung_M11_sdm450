@@ -1,4 +1,4 @@
-name: NOCTURNE // SDM450 Kernel Build
+name: NOCTURNE SDM450 Build
 run-name: "${{ inputs.kernel_name }} | ${{ inputs.clang_profile }} | ${{ inputs.root }}"
 
 on:
@@ -55,55 +55,30 @@ env:
   GCC_32_SOURCE: "https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9.git"
   GCC_32_BRANCH: "lineage-19.1"
 
-  DEFCONFIG_SOURCE: ""
   DEFCONFIG_NAME: "a11q_open_defconfig"
-  DEFCONFIG_ORIGIN_IMAGE: ""
-  DEFCONFIG_FROM_BOOT: "false"
 
-  KERNELSU_SOURCE: ""
-  KERNELSU_BRANCH: ""
   KERNELSU_AUTO_GET: "true"
   KERNELSU_AUTO_FORK: "${{ inputs.root == 'SukiSU-Ultra + SUSFS' && 'sukisu' || 'bakasu' }}"
   KERNELSU_METHOD: "shell"
   SUSFS_ENABLE: "true"
   SUSFS_FIXED: "false"
-  SUSFS_FOLDER_FIXED: ""
-  SUSFS_PATCH_FIXED: ""
-  PATCHES_SOURCE: ""
-  PATCHES_BRANCH: ""
 
   AK3_SOURCE: "https://github.com/Kazera62/AnyKernel3.git"
   AK3_BRANCH: "master"
   PACK_METHOD: "AnyKernel3"
   PACK_KMODULES: "false"
 
-  BOOT_SOURCE: ""
-  NEED_DTBO: "false"
-  NEED_SAFE_DTBO: "false"
-  GENERATE_DTB: "false"
-  GENERATE_CHIP: "qcom"
 
   ROM_TEXT: "${{ inputs.kernel_name }}"
   PYTHON_VERSION: "3"
   HOOK_METHOD: "syscall"
 
-  REKERNEL_ENABLE: "false"
-  DROIDSPACES_ENABLE: "false"
-  NOMOUNT_ENABLE: "false"
 
-  KPM_ENABLE: "false"
-  KPM_INLINE: "false"
-  KPM_KPATCH_NEXT: "false"
-  KPM_PATCH_SOURCE: "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU_patch/refs/heads/main/kpm/patch_linux"
 
-  BASEBAND_GUARD_ENABLE: "false"
-  BASEBAND_GUARD_BOOT: "false"
 
   BUILD_DEBUGGER: "true"
   SKIP_PATCH: "false"
 
-  BUILD_OTHER_CONFIG: "false"
-  MERGE_CONFIG_FILES: ""
   FREE_MORE_SPACE: "true"
 
 jobs:
@@ -117,7 +92,7 @@ jobs:
       CCACHE_HARDLINK: "true"
 
     steps:
-      - name: Checkout upstream build framework
+      - name: Checkout build framework
         uses: actions/checkout@v6
         with:
           repository: JackA1ltman/NonGKI_Kernel_Build_2nd
@@ -134,31 +109,29 @@ jobs:
           fi
           echo "Kernel: $KERNEL_NAME"
           echo "Root: $ROOT_NAME"
-          echo "SUSFS: enabled"
-          echo "Defconfig: $DEFCONFIG_NAME"
 
-      - name: Prepare build environment
+      - name: Prepare environment
         uses: ./.github/workflows/build-env
 
-      - name: Fetch toolchains and build dependencies
+      - name: Fetch toolchains
         uses: ./.github/workflows/build-ready
 
-      - name: Apply SUSFS kernel patches
+      - name: Apply SUSFS
         uses: ./.github/workflows/patch-susfs
 
-      - name: Apply no-kprobe compatibility patch
+      - name: Apply root hook patch
         uses: ./.github/workflows/patch-no-kprobe
 
-      - name: Compile kernel
+      - name: Build kernel
         uses: ./.github/workflows/build-process
 
-      - name: Package flashable AnyKernel3 ZIP
+      - name: Package ZIP
         uses: ./.github/workflows/pack-process
 
-      - name: Upload build artifact
+      - name: Upload ZIP
         uses: ./.github/workflows/upload-files
 
-      - name: Send kernel ZIP to Telegram
+      - name: Send ZIP to Telegram
         shell: bash
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
