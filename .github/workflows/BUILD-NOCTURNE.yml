@@ -1,5 +1,5 @@
 name: NOCTURNE SDM450 Build
-run-name: "${{ inputs.kernel_name }} | ${{ inputs.kernel_branch }} | ${{ inputs.clang_profile }}"
+run-name: "${{ inputs.kernel_name }} | ${{ inputs.clang_profile }} | ${{ inputs.root }}"
 
 on:
   workflow_dispatch:
@@ -9,11 +9,6 @@ on:
         required: true
         type: string
         default: NOCTURNE
-      kernel_branch:
-        description: "Branch from which to build the kernel source"
-        required: true
-        type: string
-        default: NOCTURNE-LIMITED
       clang_profile:
         description: "Compiler toolchain"
         required: true
@@ -23,11 +18,12 @@ on:
           - Clang r416183b
           - Proton Clang
       root:
-        description: "Root implementation (SUSFS is enabled for both)"
+        description: "Root implementation"
         required: true
         type: choice
         default: ReSukiSU + SUSFS
         options:
+          - Non-root
           - ReSukiSU + SUSFS
           - SukiSU-Ultra + SUSFS
 
@@ -39,10 +35,11 @@ env:
   DEVICE_CODENAME: "m11q"
 
   KERNEL_NAME: "${{ inputs.kernel_name }}"
-  KERNEL_BRANCH: "${{ inputs.kernel_branch }}"
+  # The workflow's selected Git ref is also the kernel source branch.
+  KERNEL_BRANCH: "${{ github.ref_name }}"
   ROOT_NAME: "${{ inputs.root }}"
 
-  # Required by BUILD.md for Samsung DTB/overlay generation.
+  # Required for this kernel's Samsung DTB and overlay generation.
   CUSTOM_CMDS: "CLANG_TRIPLE=aarch64-linux-gnu-"
   EXTRA_CMDS: "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/clang-custom/lib64 DTC_EXT=$GITHUB_WORKSPACE/device_kernel/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y LOCALVERSION=-$KERNEL_NAME"
 
@@ -59,12 +56,17 @@ env:
 
   DEFCONFIG_NAME: "a11q_open_defconfig"
 
-  KERNELSU_AUTO_GET: "true"
+  # The upstream framework uses BakaSU/SukiSU in automatic mode.
+  # ReSukiSU uses the framework's manual setup-script mode.
+  KERNELSU_AUTO_GET: "${{ inputs.root == 'ReSukiSU + SUSFS' && 'false' || 'true' }}"
   KERNELSU_AUTO_FORK: "${{ inputs.root == 'SukiSU-Ultra + SUSFS' && 'sukisu' || 'bakasu' }}"
+  KERNELSU_SOURCE: "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh"
+  KERNELSU_BRANCH: "main"
   KERNELSU_METHOD: "shell"
-  SUSFS_ENABLE: "true"
+  SUSFS_ENABLE: "${{ inputs.root != 'Non-root' && 'true' || 'false' }}"
   SUSFS_FIXED: "false"
 
+  # Always use the user's own AnyKernel3 repository.
   AK3_SOURCE: "https://github.com/Kazera62/AnyKernel3.git"
   AK3_BRANCH: "master"
   PACK_METHOD: "AnyKernel3"
@@ -74,8 +76,7 @@ env:
   HOOK_METHOD: "syscall"
 
   BUILD_DEBUGGER: "true"
-  # The pinned upstream action's reject handling is inverted. Its archive is
-  # checked explicitly below so rejected hunks cannot reach packaging.
+  # The upstream SUSFS reject handler is inverted; verify its archive below.
   SKIP_PATCH: "true"
   FREE_MORE_SPACE: "true"
 
@@ -94,21 +95,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           if [[ ! "$KERNEL_NAME" =~ ^[A-Za-z0-9._-]{1,32}$ ]]; then
             echo "::error::Kernel name must be 1-32 characters: letters, digits, dot, underscore, or hyphen."
             exit 1
           fi
-
-          # Keep branch names shell-safe before passing them to the build framework.
-          if [[ ! "$KERNEL_BRANCH" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$ ]] ||
-             [[ "$KERNEL_BRANCH" == *..* ]] ||
-             [[ "$KERNEL_BRANCH" == */ ]] ||
-             ! git check-ref-format --branch "$KERNEL_BRANCH" >/dev/null 2>&1; then
-            echo "::error::Invalid kernel branch name: $KERNEL_BRANCH"
+          if ! git check-ref-format --branch "$KERNEL_BRANCH" >/dev/null 2>&1; then
+            echo "::error::The selected workflow ref is not a valid kernel branch: $KERNEL_BRANCH"
             exit 1
           fi
-
           printf 'Kernel: %s\nBranch: %s\nRoot: %s\n' \
             "$KERNEL_NAME" "$KERNEL_BRANCH" "$ROOT_NAME"
 
@@ -116,8 +110,8 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: JackA1ltman/NonGKI_Kernel_Build_2nd
-          # Pin a tested framework revision for reproducible builds.
-          ref: b5d7e5be60398f040b9e9919186c410c01a228da
+          # Follow upstream mainline so framework updates are used on each run.
+          ref: mainline
           persist-credentials: false
           fetch-depth: 1
 
@@ -127,10 +121,58 @@ jobs:
       - name: Fetch toolchains and kernel source
         uses: ./.github/workflows/build-ready
 
+      - name: Remove temporary root integration for Non-root build
+        if: inputs.root == 'Non-root'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/device_kernel"
+
+          # The current upstream build-ready action installs a KSU fork
+          # unconditionally. Remove its symlink, source tree, and build wiring.
+          rm -rf drivers/kernelsu KernelSU KernelSU-Next
+
+          sed -i -E \
+            '/^[[:space:]]*obj-\$\(CONFIG_KSU\)[[:space:]]*\+=[[:space:]]*kernelsu\/[[:space:]]*$/d' \
+            drivers/Makefile
+          sed -i -E \
+            '/^[[:space:]]*source[[:space:]]+"drivers\/kernelsu\/Kconfig"[[:space:]]*$/d' \
+            drivers/Kconfig
+
+          config="arch/arm64/configs/$DEFCONFIG_NAME"
+          sed -i -E '/^(# )?CONFIG_KSU(_[A-Z0-9_]+)?(=| is not set$)/d' "$config"
+
+          if grep -nE 'drivers/kernelsu|CONFIG_KSU|KernelSU' \
+            drivers/Makefile drivers/Kconfig "$config"; then
+            echo "::error::KernelSU references remain in the Non-root build configuration."
+            exit 1
+          fi
+
+          echo "Non-root cleanup passed: no KernelSU integration remains."
+
+      - name: Use Kazera62 AnyKernel3
+        shell: bash
+        run: |
+          set -euo pipefail
+          installer="$GITHUB_WORKSPACE/device_kernel/AnyKernel3"
+
+          # Replace any bundled installer so the package always uses this repo.
+          rm -rf "$installer"
+          git clone --depth=1 --branch "$AK3_BRANCH" "$AK3_SOURCE" "$installer"
+
+          test -s "$installer/anykernel.sh" || {
+            echo "::error::AnyKernel3 repository is missing anykernel.sh."
+            exit 1
+          }
+
+          printf 'AnyKernel3 source: %s (%s)\n' "$AK3_SOURCE" "$AK3_BRANCH"
+
       - name: Apply SUSFS
+        if: inputs.root != 'Non-root'
         uses: ./.github/workflows/patch-susfs
 
       - name: Validate SUSFS patch result
+        if: inputs.root != 'Non-root'
         shell: bash
         run: |
           set -euo pipefail
@@ -150,6 +192,7 @@ jobs:
           echo "SUSFS validation passed: no rejected hunks found."
 
       - name: Apply KernelSU hook patch
+        if: inputs.root != 'Non-root'
         uses: ./.github/workflows/patch-no-kprobe
 
       - name: Compile kernel
@@ -169,12 +212,10 @@ jobs:
             echo "::error::Image.gz was not generated."
             exit 1
           }
-
           test -s "$image_gz_dtb" || {
             echo "::error::Image.gz-dtb was not generated. Packaging stopped."
             exit 1
           }
-
           test -d "$dtb_dir" || {
             echo "::error::Samsung DTB output directory is missing: $dtb_dir"
             exit 1
@@ -185,7 +226,6 @@ jobs:
             echo "::error::No Samsung DTB files were generated. Check DTC_EXT and CONFIG_BUILD_ARM64_DT_OVERLAY."
             exit 1
           fi
-
           if cmp -s "$image_gz" "$image_gz_dtb"; then
             echo "::error::Image.gz-dtb matches Image.gz byte-for-byte; DTB concatenation likely failed."
             exit 1
