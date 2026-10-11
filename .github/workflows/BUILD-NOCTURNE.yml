@@ -1,30 +1,30 @@
 name: NOCTURNE // SDM450 Kernel Build
-run-name: "${{ inputs.kernel_name }} | ${{ inputs.clang_profile }} | ${{ inputs.root_mode }}"
+run-name: "${{ inputs.kernel_name }} | ${{ inputs.clang_profile }} | ${{ inputs.root }}"
 
 on:
   workflow_dispatch:
     inputs:
       kernel_name:
-        description: "Nama kernel; hanya huruf, angka, titik, underscore, dan tanda minus"
+        description: "Nama kernel"
         required: true
         type: string
         default: NOCTURNE
       clang_profile:
-        description: "Pilih compiler Clang"
+        description: "Compiler Clang"
         required: true
         type: choice
-        default: lineage-r416183b
+        default: Clang r416183b
         options:
-          - lineage-r416183b
-          - proton-clang
-      root_mode:
-        description: "Pilih root biasa tanpa SUSFS atau root dengan SUSFS"
+          - Clang r416183b
+          - Proton Clang
+      root:
+        description: "Root dengan SUSFS"
         required: true
         type: choice
-        default: root-susfs
+        default: ReSukiSU + SUSFS
         options:
-          - root-no-susfs
-          - root-susfs
+          - ReSukiSU + SUSFS
+          - SukiSU-Ultra + SUSFS
 
 permissions:
   contents: read
@@ -38,16 +38,16 @@ env:
   DEVICE_CODENAME: "m11q"
 
   KERNEL_NAME: "${{ inputs.kernel_name }}"
-  ROOT_MODE: "${{ inputs.root_mode }}"
+  ROOT_NAME: "${{ inputs.root }}"
 
   CUSTOM_CMDS: "CLANG_TRIPLE=aarch64-linux-gnu-"
-  EXTRA_CMDS: "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/clang-custom/lib64 DTC_EXT=$GITHUB_WORKSPACE/device_kernel/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y LOCALVERSION=-$KERNEL_NAME"
+  EXTRA_CMDS: "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/clang-custom/lib64 DTC_EXT=$GITHUB_WORKSPACE/device_kernel/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y LOCALVERSION=-${{ inputs.kernel_name }}"
 
   KERNEL_SOURCE: "https://github.com/Kazera62/samsung_M11_sdm450.git"
   KERNEL_BRANCH: "${{ github.ref_name }}"
 
-  CLANG_SOURCE: "${{ inputs.clang_profile == 'proton-clang' && 'https://github.com/kdrag0n/proton-clang.git' || 'https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b.git' }}"
-  CLANG_BRANCH: "${{ inputs.clang_profile == 'proton-clang' && 'master' || 'lineage-20.0' }}"
+  CLANG_SOURCE: "${{ inputs.clang_profile == 'Proton Clang' && 'https://github.com/kdrag0n/proton-clang.git' || 'https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b.git' }}"
+  CLANG_BRANCH: "${{ inputs.clang_profile == 'Proton Clang' && 'master' || 'lineage-20.0' }}"
 
   GCC_GNU: "false"
   GCC_64_SOURCE: "https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git"
@@ -60,14 +60,12 @@ env:
   DEFCONFIG_ORIGIN_IMAGE: ""
   DEFCONFIG_FROM_BOOT: "false"
 
-  # Both root choices use the upstream BakaSU/ReSukiSU-lineage integration.
-  # The selected mode controls whether SUSFS is applied.
   KERNELSU_SOURCE: ""
   KERNELSU_BRANCH: ""
   KERNELSU_AUTO_GET: "true"
-  KERNELSU_AUTO_FORK: "bakasu"
+  KERNELSU_AUTO_FORK: "${{ inputs.root == 'SukiSU-Ultra + SUSFS' && 'sukisu' || 'bakasu' }}"
   KERNELSU_METHOD: "shell"
-  SUSFS_ENABLE: "${{ inputs.root_mode == 'root-susfs' && 'true' || 'false' }}"
+  SUSFS_ENABLE: "true"
   SUSFS_FIXED: "false"
   SUSFS_FOLDER_FIXED: ""
   SUSFS_PATCH_FIXED: ""
@@ -101,7 +99,6 @@ env:
   BASEBAND_GUARD_ENABLE: "false"
   BASEBAND_GUARD_BOOT: "false"
 
-  # Keep diagnostics on and do not continue silently after rejected SUSFS hunks.
   BUILD_DEBUGGER: "true"
   SKIP_PATCH: "false"
 
@@ -132,12 +129,12 @@ jobs:
         run: |
           set -euo pipefail
           if [[ ! "$KERNEL_NAME" =~ ^[A-Za-z0-9._-]{1,32}$ ]]; then
-            echo "::error::Invalid kernel name. Use 1-32 letters, numbers, dots, underscores, or hyphens."
+            echo "::error::Nama kernel hanya boleh berisi huruf, angka, titik, underscore, dan minus (maksimal 32 karakter)."
             exit 1
           fi
-          echo "Kernel name: $KERNEL_NAME"
-          echo "Root mode: $ROOT_MODE"
-          echo "SUSFS: $SUSFS_ENABLE"
+          echo "Kernel: $KERNEL_NAME"
+          echo "Root: $ROOT_NAME"
+          echo "SUSFS: enabled"
           echo "Defconfig: $DEFCONFIG_NAME"
 
       - name: Prepare build environment
@@ -181,7 +178,7 @@ jobs:
           }
 
           printf -v CAPTION 'NOCTURNE // SDM450\nKernel: %s\nRoot: %s\nDefconfig: %s\nClang: %s\nCommit: %.7s' \
-            "$KERNEL_NAME" "$ROOT_MODE" "$DEFCONFIG_NAME" "$CLANG_PROFILE" "$GITHUB_SHA"
+            "$KERNEL_NAME" "$ROOT_NAME" "$DEFCONFIG_NAME" "$CLANG_PROFILE" "$GITHUB_SHA"
 
           RESPONSE="$(curl --fail-with-body --silent --show-error --retry 2 --max-time 300 \
             --request POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
