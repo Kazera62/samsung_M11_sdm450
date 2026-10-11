@@ -210,7 +210,79 @@ jobs:
               "SUS_MAP",
           ):
               pattern = re.compile(
-                  rf'(?m)^ *echo "CONFIG_KSU_SUSFS_{feature}=y" >> .*
+                  rf'(?m)^ *echo "CONFIG_KSU_SUSFS_{feature}=y" >> .*$'
+              )
+              susfs_action, count = pattern.subn("", susfs_action)
+              if count != 1:
+                  raise SystemExit(
+                      f"Expected one optional SUSFS config line for {feature}, found {count}."
+                  )
+
+          # Embed the Samsung 4.9 compatibility hunk in this workflow instead
+          # of adding a NonGKI_Kernel_Patches directory to the kernel source.
+          fixed_start = susfs_action.find("      - name: SUSFS Patch Fixed")
+          upload_start = susfs_action.find("      - name: Upload Build Patch Rejected Files", fixed_start)
+          if fixed_start < 0 or upload_start < 0:
+              raise SystemExit("Could not locate the framework SUSFS fixed-patch step.")
+
+          inline_fixed_step = r'''      - name: SUSFS Patch Fixed
+        if: env.SUSFS_ENABLE == 'true' && env.SUSFS_SKIP != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/device_kernel"
+
+          if [[ "$SUSFS_PATCH_FIXED" != "inline_samsung_49_compat" ]]; then
+            echo "::error::Unexpected SUSFS compatibility selector."
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("fs/namespace.c")
+          source = path.read_text()
+
+          header_block = """#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs_def.h>
+#endif // #ifdef CONFIG_KSU_SUSFS
+"""
+          header_marker = "#include <linux/fslog.h>\n"
+          if "#include <linux/susfs_def.h>" not in source:
+              if source.count(header_marker) != 1:
+                  raise SystemExit("Cannot locate the Samsung fslog include for SUSFS compatibility.")
+              source = source.replace(header_marker, header_block + header_marker, 1)
+
+          mount_block = """#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+extern bool susfs_is_current_ksu_domain(void);
+extern struct static_key_true susfs_is_sdcard_android_data_not_decrypted;
+
+#define CL_COPY_MNT_NS BIT(25) /* used by copy_mnt_ns() */
+
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+"""
+          if "CL_COPY_MNT_NS BIT(25)" not in source:
+              anchor = '#include "internal.h"\n'
+              if source.count(anchor) != 1:
+                  raise SystemExit("Cannot locate the namespace include anchor for SUSFS compatibility.")
+              source = source.replace(anchor, anchor + "\n" + mount_block, 1)
+
+          for required in (
+              "#include <linux/susfs_def.h>",
+              "susfs_is_current_ksu_domain",
+              "susfs_is_sdcard_android_data_not_decrypted",
+              "CL_COPY_MNT_NS BIT(25)",
+          ):
+              if required not in source:
+                  raise SystemExit(f"SUSFS compatibility adjustment missing: {required}")
+
+          path.write_text(source)
+          print("Applied inline Samsung Linux 4.9 SUSFS namespace compatibility.")
+          PY
+
+'''
+          susfs_action = susfs_action[:fixed_start] + inline_fixed_step + susfs_action[upload_start:]
+          susfs_action_path.write_text(susfs_action)
           # Keep runner setup lighter: skip optional package purging and compilation
           # of Coccinelle, which is not used by this build path.
           env_path = Path(".github/workflows/build-env/action.yml")
