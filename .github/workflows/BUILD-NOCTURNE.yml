@@ -938,33 +938,33 @@ jobs:
           '
 
           report="$(cat <<EOF
-NOCTURNE BUILD REPORT
-Device: Samsung Galaxy M11 / A11 (SDM450; m11q)
-Kernel name: $KERNEL_NAME
-Kernel release: $BUILT_KERNEL_RELEASE
-Source: $KERNEL_SOURCE
-Branch: $KERNEL_BRANCH
-Source commit: $KERNEL_SOURCE_COMMIT
-Build: #$GITHUB_RUN_NUMBER (attempt $GITHUB_RUN_ATTEMPT)
-Build time: $BUILD_TIME_UTC
-Compiler profile: $CLANG_PROFILE
-Clang: $CLANG_VERSION
-GCC cross compiler: $GCC_VERSION
-Root implementation: $ROOT_NAME
-Root revision: $ROOT_VERSION
-SUSFS: $SUSFS_SUMMARY
-Defconfig: $DEFCONFIG_NAME
-CPU governor: $CPU_DEFAULT_GOVERNOR
-Block I/O scheduler: $IO_DEFAULT_SCHEDULER
-zRAM compression: $ZRAM_COMPRESSION
-TCP congestion control: $TCP_DEFAULT_CONGESTION
-CONFIG_HZ: $CONFIG_HZ_VALUE
-Packaging: $PACK_METHOD
-ZIP: $PACK_NAME
-Runner: ubuntu-24.04 / GitHub Actions
-Workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
-EOF
-)"
+          NOCTURNE BUILD REPORT
+          Device: Samsung Galaxy M11 / A11 (SDM450; m11q)
+          Kernel name: $KERNEL_NAME
+          Kernel release: $BUILT_KERNEL_RELEASE
+          Source: $KERNEL_SOURCE
+          Branch: $KERNEL_BRANCH
+          Source commit: $KERNEL_SOURCE_COMMIT
+          Build: #$GITHUB_RUN_NUMBER (attempt $GITHUB_RUN_ATTEMPT)
+          Build time: $BUILD_TIME_UTC
+          Compiler profile: $CLANG_PROFILE
+          Clang: $CLANG_VERSION
+          GCC cross compiler: $GCC_VERSION
+          Root implementation: $ROOT_NAME
+          Root revision: $ROOT_VERSION
+          SUSFS: $SUSFS_SUMMARY
+          Defconfig: $DEFCONFIG_NAME
+          CPU governor: $CPU_DEFAULT_GOVERNOR
+          Block I/O scheduler: $IO_DEFAULT_SCHEDULER
+          zRAM compression: $ZRAM_COMPRESSION
+          TCP congestion control: $TCP_DEFAULT_CONGESTION
+          CONFIG_HZ: $CONFIG_HZ_VALUE
+          Packaging: $PACK_METHOD
+          ZIP: $PACK_NAME
+          Runner: ubuntu-24.04 / GitHub Actions
+          Workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+          EOF
+          )
 
           message_response="$(curl --fail-with-body --silent --show-error --retry 2 --max-time 60 \
             --request POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
