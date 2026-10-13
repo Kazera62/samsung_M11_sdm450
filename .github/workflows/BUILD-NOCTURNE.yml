@@ -10,13 +10,16 @@ on:
         type: string
         default: NOCTURNE
       clang_profile:
-        description: "Compiler toolchain"
+        description: "Compiler toolchain; Clang r416183b is the recommended baseline for this Linux 4.9 kernel"
         required: true
         type: choice
         default: Clang r416183b
         options:
           - Clang r416183b
           - Proton Clang
+          - ZyC Clang 12.0.1
+          - ZyC Clang 16.0.6 (Experimental)
+          - Neutron Clang (Experimental)
       root:
         description: "Root implementation"
         required: true
@@ -98,8 +101,8 @@ env:
 
   KERNEL_SOURCE: "https://github.com/Kazera62/samsung_M11_sdm450.git"
 
-  CLANG_SOURCE: "${{ inputs.clang_profile == 'Proton Clang' && 'https://github.com/kdrag0n/proton-clang.git' || 'https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b.git' }}"
-  CLANG_BRANCH: "${{ inputs.clang_profile == 'Proton Clang' && 'master' || 'lineage-20.0' }}"
+  CLANG_SOURCE: "${{ inputs.clang_profile == 'Proton Clang' && 'https://github.com/kdrag0n/proton-clang.git' || inputs.clang_profile == 'ZyC Clang 12.0.1' && 'https://github.com/ZyCromerZ/Clang/releases/download/12.0.1-20230207-release/Clang-12.0.1-20230207.tar.gz' || inputs.clang_profile == 'ZyC Clang 16.0.6 (Experimental)' && 'https://github.com/ZyCromerZ/Clang/releases/download/16.0.6-20260807-release/Clang-16.0.6-20260807.tar.gz' || inputs.clang_profile == 'Neutron Clang (Experimental)' && 'https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman' || 'https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b.git' }}"
+  CLANG_BRANCH: "${{ inputs.clang_profile == 'Proton Clang' && 'master' || inputs.clang_profile == 'Neutron Clang (Experimental)' && 'main' || 'lineage-20.0' }}"
 
   GCC_GNU: "false"
   GCC_64_SOURCE: "https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git"
@@ -116,6 +119,7 @@ env:
   KERNELSU_BRANCH: "${{ inputs.root == 'BakaSU + SUSFS' && '5b76b884c75f729a220bb317aa4a4fc78f0e0e9c' || 'main' }}"
   KERNELSU_METHOD: "shell"
   SUSFS_ENABLE: "${{ inputs.root == 'BakaSU + SUSFS' && 'true' || 'false' }}"
+  SUSFS_VERSION: "2.2.00"
   SUSFS_FIXED: "false"
   # Non-empty selector activates the inline Samsung Linux 4.9 compatibility adjustment.
   SUSFS_PATCH_FIXED: "${{ inputs.root == 'BakaSU + SUSFS' && 'inline_samsung_49_compat' || '' }}"
@@ -820,16 +824,89 @@ jobs:
 
           echo "Package validation passed: $PACK_NAME"
 
+      - name: Collect build metadata
+        shell: bash
+        env:
+          CLANG_PROFILE: ${ inputs.clang_profile }}
+        run: |
+          set -euo pipefail
+          source_dir="$GITHUB_WORKSPACE/device_kernel"
+          clang_bin="$GITHUB_WORKSPACE/clang-custom/bin/clang"
+          compiler_version="Unavailable"
+          gcc_version="Not detected"
+          if [[ -x "$clang_bin" ]]; then
+            compiler_version="$("$clang_bin" --version 2>/dev/null | sed -n '1p' || true)"
+          fi
+          [[ -n "$compiler_version" ]] || compiler_version="Unavailable"
+
+          gcc_bin=""
+          if [[ -d "$GITHUB_WORKSPACE/gcc-64/bin" ]]; then
+            gcc_bin="$(find "$GITHUB_WORKSPACE/gcc-64/bin" -maxdepth 1 \( -name 'aarch64-linux-android-gcc' -o -name 'aarch64-linux-gnu-gcc' \) -print -quit 2>/dev/null || true)"
+          fi
+          if [[ -n "$gcc_bin" && -x "$gcc_bin" ]]; then
+            gcc_version="$("$gcc_bin" --version 2>/dev/null | sed -n '1p' || true)"
+          fi
+          [[ -n "$gcc_version" ]] || gcc_version="Not detected by metadata step"
+
+          kernel_release="$(make -s -C "$source_dir" O=out ARCH=arm64 LOCALVERSION="-$KERNEL_NAME" kernelrelease 2>/dev/null | tail -n 1 || true)"
+          [[ -n "$kernel_release" ]] || kernel_release="${KERNEL_VERSION:-unknown}"
+          kernel_commit="$(git -C "$source_dir" rev-parse --short=12 HEAD 2>/dev/null || printf '%s' "${GITHUB_SHA:0:12}")"
+          build_time="$(date -u '+%Y-%m-%d %H:%M UTC')"
+
+          if [[ "$ROOT_NAME" == "BakaSU + SUSFS" ]]; then
+            root_version="BakaSU (revision ${KERNELSU_BRANCH:0:12})"
+            susfs_summary="v$SUSFS_VERSION; SUS_PATH and SUS_MOUNT enabled; unported optional features disabled for Linux 4.9 compatibility"
+          else
+            root_version="No kernel root integration"
+            susfs_summary="Disabled"
+          fi
+
+          {
+            echo "BUILT_KERNEL_RELEASE=$kernel_release"
+            echo "KERNEL_SOURCE_COMMIT=$kernel_commit"
+            echo "BUILD_TIME_UTC=$build_time"
+            echo "CLANG_VERSION=$compiler_version"
+            echo "GCC_VERSION=$gcc_version"
+            echo "ROOT_VERSION=$root_version"
+            echo "SUSFS_SUMMARY=$susfs_summary"
+          } >> "$GITHUB_ENV"
+
+          {
+            echo "## NOCTURNE build metadata"
+            echo
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Device | Samsung Galaxy M11 / A11 (SDM450) |"
+            echo "| Kernel name | $KERNEL_NAME |"
+            echo "| Kernel release | $kernel_release |"
+            echo "| Source branch | $KERNEL_BRANCH |"
+            echo "| Source commit | $kernel_commit |"
+            echo "| Build time | $build_time |"
+            echo "| Compiler profile | $CLANG_PROFILE |"
+            echo "| Clang | $compiler_version |"
+            echo "| GCC cross compiler | $gcc_version |"
+            echo "| Root | $root_version |"
+            echo "| SUSFS | $susfs_summary |"
+            echo "| Defconfig | $DEFCONFIG_NAME |"
+            echo "| CPU governor | $CPU_DEFAULT_GOVERNOR |"
+            echo "| I/O scheduler | $IO_DEFAULT_SCHEDULER |"
+            echo "| zRAM compression | $ZRAM_COMPRESSION |"
+            echo "| TCP congestion | $TCP_DEFAULT_CONGESTION |"
+            echo "| CONFIG_HZ | $CONFIG_HZ_VALUE |"
+            echo "| Package method | $PACK_METHOD |"
+            echo "| ZIP | $PACK_NAME |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload ZIP artifact
         uses: ./.github/workflows/upload-files
 
-      - name: Send ZIP to Telegram (optional)
+      - name: Send ZIP and build report to Telegram (optional)
         continue-on-error: true
         shell: bash
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          CLANG_PROFILE: ${{ inputs.clang_profile }}
+          TELEGRAM_BOT_TOKEN: ${ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${ secrets.TELEGRAM_CHAT_ID }}
+          CLANG_PROFILE: ${ inputs.clang_profile }}
         run: |
           set -euo pipefail
 
@@ -842,20 +919,64 @@ jobs:
           zip_path="$GITHUB_WORKSPACE/device_kernel/$PACK_NAME"
           test -s "$zip_path"
 
-          printf -v caption 'NOCTURNE // SDM450\nKernel: %s\nBranch: %s\nRoot: %s\nDefconfig: %s\nClang: %s\nCommit: %.7s' \
-            "$KERNEL_NAME" "$KERNEL_BRANCH" "$ROOT_NAME" "$DEFCONFIG_NAME" "$CLANG_PROFILE" "$GITHUB_SHA"
+          printf -v caption 'NOCTURNE / SDM450\nKernel: %s (%s)\nClang: %s\nRoot: %s\nCommit: %.12s' \
+            "$KERNEL_NAME" "$BUILT_KERNEL_RELEASE" "$CLANG_PROFILE" "$ROOT_NAME" "$KERNEL_SOURCE_COMMIT"
 
-          response="$(curl --fail-with-body --silent --show-error --retry 2 --max-time 300 \
+          document_response="$(curl --fail-with-body --silent --show-error --retry 2 --max-time 300 \
             --request POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
             --form-string "chat_id=${TELEGRAM_CHAT_ID}" \
             --form-string "caption=$caption" \
-            --form "document=@${zip_path};type=application/zip")"
+            --form "document=${zip_path};type=application/zip")"
 
-          printf '%s' "$response" | python3 -c '
+          printf '%s' "$document_response" | python3 -c '
           import json, sys
           data = json.load(sys.stdin)
           if not data.get("ok"):
-              print("Telegram upload failed: " + str(data.get("description", "unknown API error")), file=sys.stderr)
+              print("Telegram document upload failed: " + str(data.get("description", "unknown API error")), file=sys.stderr)
               sys.exit(1)
           print("Telegram accepted the kernel ZIP.")
+          '
+
+          report="$(cat <<EOF
+NOCTURNE BUILD REPORT
+Device: Samsung Galaxy M11 / A11 (SDM450; m11q)
+Kernel name: $KERNEL_NAME
+Kernel release: $BUILT_KERNEL_RELEASE
+Source: $KERNEL_SOURCE
+Branch: $KERNEL_BRANCH
+Source commit: $KERNEL_SOURCE_COMMIT
+Build: #$GITHUB_RUN_NUMBER (attempt $GITHUB_RUN_ATTEMPT)
+Build time: $BUILD_TIME_UTC
+Compiler profile: $CLANG_PROFILE
+Clang: $CLANG_VERSION
+GCC cross compiler: $GCC_VERSION
+Root implementation: $ROOT_NAME
+Root revision: $ROOT_VERSION
+SUSFS: $SUSFS_SUMMARY
+Defconfig: $DEFCONFIG_NAME
+CPU governor: $CPU_DEFAULT_GOVERNOR
+Block I/O scheduler: $IO_DEFAULT_SCHEDULER
+zRAM compression: $ZRAM_COMPRESSION
+TCP congestion control: $TCP_DEFAULT_CONGESTION
+CONFIG_HZ: $CONFIG_HZ_VALUE
+Packaging: $PACK_METHOD
+ZIP: $PACK_NAME
+Runner: ubuntu-24.04 / GitHub Actions
+Workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+EOF
+)"
+
+          message_response="$(curl --fail-with-body --silent --show-error --retry 2 --max-time 60 \
+            --request POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --form-string "chat_id=${TELEGRAM_CHAT_ID}" \
+            --form-string "text=$report" \
+            --form-string "disable_web_page_preview=true")"
+
+          printf '%s' "$message_response" | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)
+          if not data.get("ok"):
+              print("Telegram build report failed: " + str(data.get("description", "unknown API error")), file=sys.stderr)
+              sys.exit(1)
+          print("Telegram accepted the build report.")
           '
