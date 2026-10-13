@@ -827,7 +827,7 @@ jobs:
       - name: Collect build metadata
         shell: bash
         env:
-          CLANG_PROFILE: ${ inputs.clang_profile }}
+          CLANG_PROFILE: ${{ inputs.clang_profile }}
         run: |
           set -euo pipefail
           source_dir="$GITHUB_WORKSPACE/device_kernel"
@@ -904,9 +904,9 @@ jobs:
         continue-on-error: true
         shell: bash
         env:
-          TELEGRAM_BOT_TOKEN: ${ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${ secrets.TELEGRAM_CHAT_ID }}
-          CLANG_PROFILE: ${ inputs.clang_profile }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          CLANG_PROFILE: ${{ inputs.clang_profile }}
         run: |
           set -euo pipefail
 
