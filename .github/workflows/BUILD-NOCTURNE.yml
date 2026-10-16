@@ -876,11 +876,8 @@ jobs:
           build_time="$(date -u '+%Y-%m-%d %H:%M UTC')"
 
           if [[ "$ROOT_NAME" == "BakaSU + SUSFS" ]]; then
-            if [[ "$KERNELSU_BRANCH" == "5b76b884c75f729a220bb317aa4a4fc78f0e0e9c" ]]; then
-              root_version="BakaSU v4.2.0-rc3-5b76b884 (code 35222)"
-            else
-              root_version="BakaSU (rev ${KERNELSU_BRANCH:0:12})"
-            fi
+            # Do not hardcode BakaSU's version here; it can change with the pinned revision.
+            root_version="BakaSU"
             manager_support="KernelSU Official, KOWSU, BakaSU"
             susfs_summary="v$SUSFS_VERSION"
           else
