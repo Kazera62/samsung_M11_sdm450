@@ -119,7 +119,7 @@ env:
   KERNELSU_BRANCH: "${{ inputs.root == 'BakaSU + SUSFS' && '5b76b884c75f729a220bb317aa4a4fc78f0e0e9c' || 'main' }}"
   KERNELSU_METHOD: "shell"
   SUSFS_ENABLE: "${{ inputs.root == 'BakaSU + SUSFS' && 'true' || 'false' }}"
-  SUSFS_VERSION: "2.2.00"
+  SUSFS_VERSION: "2.3.0"
   SUSFS_FIXED: "false"
   # Non-empty selector activates the inline Samsung Linux 4.9 compatibility adjustment.
   SUSFS_PATCH_FIXED: "${{ inputs.root == 'BakaSU + SUSFS' && 'inline_samsung_49_compat' || '' }}"
