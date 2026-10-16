@@ -876,9 +876,13 @@ jobs:
           build_time="$(date -u '+%Y-%m-%d %H:%M UTC')"
 
           if [[ "$ROOT_NAME" == "BakaSU + SUSFS" ]]; then
-            root_version="BakaSU (rev ${KERNELSU_BRANCH:0:12})"
-            manager_support="BakaSU / KernelSU / KOWSU"
-            susfs_summary="v$SUSFS_VERSION (SUS_PATH + SUS_MOUNT)"
+            if [[ "$KERNELSU_BRANCH" == "5b76b884c75f729a220bb317aa4a4fc78f0e0e9c" ]]; then
+              root_version="BakaSU v4.2.0-rc3-5b76b884 (code 35222)"
+            else
+              root_version="BakaSU (rev ${KERNELSU_BRANCH:0:12})"
+            fi
+            manager_support="KernelSU Official, KOWSU, BakaSU"
+            susfs_summary="v$SUSFS_VERSION"
           else
             root_version="Disabled"
             manager_support="N/A"
@@ -911,6 +915,7 @@ jobs:
             echo "| Clang | $compiler_version |"
             echo "| GCC cross compiler | $gcc_version |"
             echo "| Root | $root_version |"
+            echo "| Manager support | $manager_support |"
             echo "| SUSFS | $susfs_summary |"
             echo "| Defconfig | $DEFCONFIG_NAME |"
             echo "| CPU governor | $CPU_DEFAULT_GOVERNOR |"
