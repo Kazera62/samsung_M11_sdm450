@@ -458,8 +458,8 @@ jobs:
 
           # The upstream error-artifact step still uses upload-artifact v4 (Node 20).
           # Upgrade that reference to the Node 24-compatible v7 to avoid runner warnings.
-          upload_v4 = re.compile(r"(?m)^([ \\t]*uses:[ \\t]*actions/upload-artifact)@v4(?:\\.[0-9.]+)?[ \\t]*$")
-          process, upload_v4_count = upload_v4.subn(r"\\1@v7", process)
+          upload_v4 = re.compile(r"(?m)^([ \t]*uses:[ \t]*actions/upload-artifact)@v4(?:\.[0-9.]+)?[ \t]*$")
+          process, upload_v4_count = upload_v4.subn(r"\1@v7", process)
           if upload_v4_count:
               print(f"Upgraded {upload_v4_count} upload-artifact v4 reference(s) to v7.")
           else:
