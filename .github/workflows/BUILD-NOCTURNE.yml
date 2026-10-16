@@ -19,7 +19,6 @@ on:
           - Proton Clang
           - ZyC Clang 12.0.1
           - ZyC Clang 16.0.6 (Experimental)
-          - Neutron Clang (Experimental)
       root:
         description: "Root implementation"
         required: true
@@ -101,8 +100,8 @@ env:
 
   KERNEL_SOURCE: "https://github.com/Kazera62/samsung_M11_sdm450.git"
 
-  CLANG_SOURCE: "${{ inputs.clang_profile == 'Proton Clang' && 'https://github.com/kdrag0n/proton-clang.git' || inputs.clang_profile == 'ZyC Clang 12.0.1' && 'https://github.com/ZyCromerZ/Clang/releases/download/12.0.1-20230207-release/Clang-12.0.1-20230207.tar.gz' || inputs.clang_profile == 'ZyC Clang 16.0.6 (Experimental)' && 'https://github.com/ZyCromerZ/Clang/releases/download/16.0.6-20260807-release/Clang-16.0.6-20260807.tar.gz' || inputs.clang_profile == 'Neutron Clang (Experimental)' && 'https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman' || 'https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b.git' }}"
-  CLANG_BRANCH: "${{ inputs.clang_profile == 'Proton Clang' && 'master' || inputs.clang_profile == 'Neutron Clang (Experimental)' && 'main' || 'lineage-20.0' }}"
+  CLANG_SOURCE: "${{ inputs.clang_profile == 'Proton Clang' && 'https://github.com/kdrag0n/proton-clang.git' || inputs.clang_profile == 'ZyC Clang 12.0.1' && 'https://github.com/ZyCromerZ/Clang/releases/download/12.0.1-20230207-release/Clang-12.0.1-20230207.tar.gz' || inputs.clang_profile == 'ZyC Clang 16.0.6 (Experimental)' && 'https://github.com/ZyCromerZ/Clang/releases/download/16.0.6-20260807-release/Clang-16.0.6-20260807.tar.gz' || 'https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b.git' }}"
+  CLANG_BRANCH: "${{ inputs.clang_profile == 'Proton Clang' && 'master' || 'lineage-20.0' }}"
 
   GCC_GNU: "false"
   GCC_64_SOURCE: "https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git"
@@ -456,6 +455,16 @@ jobs:
                     # KPM Detect
           '''
           process = replace_once(process, config_validation_marker, config_validation_hook, "post-defconfig option-validation hook")
+
+          # The upstream error-artifact step still uses upload-artifact v4 (Node 20).
+          # Upgrade that reference to the Node 24-compatible v7 to avoid runner warnings.
+          upload_v4 = re.compile(r"(?m)^([ \\t]*uses:[ \\t]*actions/upload-artifact)@v4(?:\\.[0-9.]+)?[ \\t]*$")
+          process, upload_v4_count = upload_v4.subn(r"\\1@v7", process)
+          if upload_v4_count:
+              print(f"Upgraded {upload_v4_count} upload-artifact v4 reference(s) to v7.")
+          else:
+              print("No upload-artifact v4 reference found in build-process; no runtime upgrade needed.")
+
           process_path.write_text(process)
           print("Framework actions adjusted: rootless setup is skipped, SUSFS compatibility is inline, and selected kernel defaults are validated.")
           PY
@@ -937,7 +946,7 @@ jobs:
           print("Telegram accepted the kernel ZIP.")
           '
 
-          report="$(cat <<EOF
+          report=$(cat <<EOF
           NOCTURNE BUILD REPORT
           Device: Samsung Galaxy M11 / A11 (SDM450; m11q)
           Kernel name: $KERNEL_NAME
