@@ -337,7 +337,10 @@ jobs:
                     PY
           
           '''
-          susfs_action = susfs_action[:fixed_start] + inline_fixed_step + susfs_action[upload_start:]
+          # Keep rejected-hunk diagnostics in the build log, but do not publish a
+          # separate patch_rejected_files artifact. The kernel ZIP is the only
+          # artifact intended for normal successful builds.
+          susfs_action = susfs_action[:fixed_start] + inline_fixed_step
           susfs_action_path.write_text(susfs_action)
           # Keep runner setup lighter: skip optional package purging and compilation
           # of Coccinelle, which is not used by this build path.
