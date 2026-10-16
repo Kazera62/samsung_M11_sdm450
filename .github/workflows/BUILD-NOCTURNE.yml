@@ -875,15 +875,26 @@ jobs:
           kernel_commit="$(git -C "$source_dir" rev-parse --short=12 HEAD 2>/dev/null || printf '%s' "${GITHUB_SHA:0:12}")"
           build_time="$(date -u '+%Y-%m-%d %H:%M UTC')"
 
-          if [[ "$ROOT_NAME" == "BakaSU + SUSFS" ]]; then
-            # Do not hardcode BakaSU's version here; it can change with the pinned revision.
-            root_version="BakaSU"
-            manager_support="KernelSU Official, KOWSU, BakaSU"
-            susfs_summary="v$SUSFS_VERSION"
-          else
+          if [[ "$ROOT_NAME" == "Non-root" ]]; then
             root_version="Disabled"
             manager_support="N/A"
             susfs_summary="Disabled"
+          else
+            # Derive the displayed root name from the selected workflow option.
+            root_version="${ROOT_NAME% + SUSFS}"
+
+            # Manager support is known for the configured BakaSU integration only.
+            if [[ "$root_version" == "BakaSU" ]]; then
+              manager_support="KernelSU Official, KOWSU, BakaSU"
+            else
+              manager_support="Not specified for $root_version"
+            fi
+
+            if [[ "$SUSFS_ENABLE" == "true" ]]; then
+              susfs_summary="v$SUSFS_VERSION"
+            else
+              susfs_summary="Disabled"
+            fi
           fi
 
           {
