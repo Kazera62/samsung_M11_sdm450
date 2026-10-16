@@ -860,16 +860,28 @@ jobs:
           fi
           [[ -n "$gcc_version" ]] || gcc_version="Not detected by metadata step"
 
-          kernel_release="$(make -s -C "$source_dir" O=out ARCH=arm64 LOCALVERSION="-$KERNEL_NAME" kernelrelease 2>/dev/null | tail -n 1 || true)"
+          # Read VERSION.PATCHLEVEL.SUBLEVEL directly for an accurate public release string.
+          # Keep KERNEL_VERSION unchanged because the framework uses 4.9 for SUSFS patch filenames.
+          kernel_release="$(awk '
+            /^VERSION[[:space:]]*=/ { version=$3 }
+            /^PATCHLEVEL[[:space:]]*=/ { patchlevel=$3 }
+            /^SUBLEVEL[[:space:]]*=/ { sublevel=$3 }
+            END {
+              if (version != "" && patchlevel != "" && sublevel != "")
+                printf "%s.%s.%s", version, patchlevel, sublevel
+            }
+          ' "$source_dir/Makefile")"
           [[ -n "$kernel_release" ]] || kernel_release="${KERNEL_VERSION:-unknown}"
           kernel_commit="$(git -C "$source_dir" rev-parse --short=12 HEAD 2>/dev/null || printf '%s' "${GITHUB_SHA:0:12}")"
           build_time="$(date -u '+%Y-%m-%d %H:%M UTC')"
 
           if [[ "$ROOT_NAME" == "BakaSU + SUSFS" ]]; then
-            root_version="BakaSU (revision ${KERNELSU_BRANCH:0:12})"
-            susfs_summary="v$SUSFS_VERSION; SUS_PATH and SUS_MOUNT enabled; unported optional features disabled for Linux 4.9 compatibility"
+            root_version="BakaSU (rev ${KERNELSU_BRANCH:0:12})"
+            manager_support="BakaSU / KernelSU / KOWSU"
+            susfs_summary="v$SUSFS_VERSION (SUS_PATH + SUS_MOUNT)"
           else
-            root_version="No kernel root integration"
+            root_version="Disabled"
+            manager_support="N/A"
             susfs_summary="Disabled"
           fi
 
@@ -880,6 +892,7 @@ jobs:
             echo "CLANG_VERSION=$compiler_version"
             echo "GCC_VERSION=$gcc_version"
             echo "ROOT_VERSION=$root_version"
+            echo "MANAGER_SUPPORT=$manager_support"
             echo "SUSFS_SUMMARY=$susfs_summary"
           } >> "$GITHUB_ENV"
 
@@ -950,31 +963,15 @@ jobs:
           '
 
           report=$(cat <<EOF
-          NOCTURNE BUILD REPORT
-          Device: Samsung Galaxy M11 / A11 (SDM450; m11q)
-          Kernel name: $KERNEL_NAME
-          Kernel release: $BUILT_KERNEL_RELEASE
-          Source: $KERNEL_SOURCE
-          Branch: $KERNEL_BRANCH
-          Source commit: $KERNEL_SOURCE_COMMIT
-          Build: #$GITHUB_RUN_NUMBER (attempt $GITHUB_RUN_ATTEMPT)
-          Build time: $BUILD_TIME_UTC
-          Compiler profile: $CLANG_PROFILE
-          Clang: $CLANG_VERSION
-          GCC cross compiler: $GCC_VERSION
-          Root implementation: $ROOT_NAME
-          Root revision: $ROOT_VERSION
+          Kernel: $KERNEL_NAME
+          Device: Samsung Galaxy M11/A11
+          Kernel: $BUILT_KERNEL_RELEASE
+          Root: $ROOT_VERSION
+          Manager Support: $MANAGER_SUPPORT
           SUSFS: $SUSFS_SUMMARY
-          Defconfig: $DEFCONFIG_NAME
-          CPU governor: $CPU_DEFAULT_GOVERNOR
-          Block I/O scheduler: $IO_DEFAULT_SCHEDULER
-          zRAM compression: $ZRAM_COMPRESSION
-          TCP congestion control: $TCP_DEFAULT_CONGESTION
-          CONFIG_HZ: $CONFIG_HZ_VALUE
-          Packaging: $PACK_METHOD
-          ZIP: $PACK_NAME
-          Runner: ubuntu-24.04 / GitHub Actions
-          Workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+          Clang: $CLANG_PROFILE
+          HZ: $CONFIG_HZ_VALUE
+          CPU Governor: $CPU_DEFAULT_GOVERNOR
           EOF
           )
 
