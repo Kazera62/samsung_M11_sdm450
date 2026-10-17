@@ -378,6 +378,26 @@ jobs:
                       exit 1
                     fi
 
+                    # Re-apply CPU governor and timer choices to the final output config
+                    # after defconfig and any optional config merges.
+                    case "$CPU_DEFAULT_GOVERNOR" in
+                      performance|powersave|userspace|ondemand|conservative|schedutil) cpu_gov_upper="$(printf '%s' "$CPU_DEFAULT_GOVERNOR" | tr '[:lower:]' '[:upper:]')" ;;
+                      *) echo "::error::Invalid CPU governor selection: $CPU_DEFAULT_GOVERNOR"; exit 1 ;;
+                    esac
+                    sed -i -E '/^(CONFIG_CPU_FREQ_DEFAULT_GOV_(PERFORMANCE|POWERSAVE|USERSPACE|ONDEMAND|CONSERVATIVE|INTERACTIVE|SCHEDUTIL)=y|# CONFIG_CPU_FREQ_DEFAULT_GOV_(PERFORMANCE|POWERSAVE|USERSPACE|ONDEMAND|CONSERVATIVE|INTERACTIVE|SCHEDUTIL) is not set)$/d' "$config"
+                    printf 'CONFIG_CPU_FREQ_DEFAULT_GOV_%s=y\n' "$cpu_gov_upper" >> "$config"
+
+                    case "$CONFIG_HZ_VALUE" in
+                      100|250|300|1000) ;;
+                      *) echo "::error::Invalid CONFIG_HZ selection: $CONFIG_HZ_VALUE"; exit 1 ;;
+                    esac
+                    sed -i -E '/^(CONFIG_HZ_(100|250|300|1000)=y|# CONFIG_HZ_(100|250|300|1000) is not set|CONFIG_HZ=[0-9]+)$/d' "$config"
+                    printf 'CONFIG_HZ_%s=y\n' "$CONFIG_HZ_VALUE" >> "$config"
+
+                    # Recalculate derived CONFIG_HZ and normalize Kconfig selections.
+                    make CC="ccache clang" ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} O=out ARCH="${{ env.KERNEL_ARCH }}" olddefconfig
+
+                    config="$GITHUB_WORKSPACE/device_kernel/out/.config"
                     require_config() {
                       if ! grep -Fqx -- "$1" "$config"; then
                         echo "::error::Kconfig rejected selected option: $1"
@@ -775,6 +795,37 @@ jobs:
 
       - name: Compile kernel
         uses: ./.github/workflows/build-process
+
+
+      - name: Verify compiled CPU governor and timer tick
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_dir="$GITHUB_WORKSPACE/device_kernel/out"
+          autoconf="$build_dir/include/generated/autoconf.h"
+          test -s "$autoconf" || {
+            echo "::error::Generated autoconf.h is missing; cannot verify compiled options."
+            exit 1
+          }
+
+          case "$CPU_DEFAULT_GOVERNOR" in
+            performance|powersave|userspace|ondemand|conservative|schedutil) cpu_gov_upper="$(printf '%s' "$CPU_DEFAULT_GOVERNOR" | tr '[:lower:]' '[:upper:]')" ;;
+            *) echo "::error::Invalid CPU governor selection: $CPU_DEFAULT_GOVERNOR"; exit 1 ;;
+          esac
+
+          grep -Fqx "#define CONFIG_CPU_FREQ_DEFAULT_GOV_${cpu_gov_upper} 1" "$autoconf" || {
+            echo "::error::Compiled kernel did not retain CPU default governor: $CPU_DEFAULT_GOVERNOR"
+            exit 1
+          }
+          grep -Fqx "#define CONFIG_HZ $CONFIG_HZ_VALUE" "$autoconf" || {
+            echo "::error::Compiled kernel CONFIG_HZ does not match selected value $CONFIG_HZ_VALUE."
+            grep -E '^#define CONFIG_HZ(_[0-9]+)? ' "$autoconf" || true
+            exit 1
+          }
+
+          echo "Compiled kernel config confirmed:"
+          echo "  Default CPU governor: $CPU_DEFAULT_GOVERNOR"
+          echo "  CONFIG_HZ: $CONFIG_HZ_VALUE"
 
       - name: Validate kernel image and DTB output
         shell: bash
