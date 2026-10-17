@@ -196,34 +196,33 @@ jobs:
           # Apply NetHunter before framework hook/root patching can alter shared source files.
           if "name: Apply NetHunter Wi-Fi injection patch (Linux 4.9)" not in ready:
               nethunter_step = r'''      - name: Apply NetHunter Wi-Fi injection patch (Linux 4.9)
-        if: env.ENABLE_NETHUNTER == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$GITHUB_WORKSPACE/device_kernel"
-          patch_file="patches/nethunter/kali-wifi-injection-4.9.patch"
-
-          test -s "$patch_file" || {
-            echo "::error::NetHunter is enabled, but $patch_file is missing."
-            exit 1
-          }
-
-          if git apply --check "$patch_file"; then
-            git apply "$patch_file"
-            echo "Applied source-matched Kali Linux 4.9 Wi-Fi injection patch."
-          elif git apply --reverse --check "$patch_file"; then
-            echo "NetHunter Wi-Fi injection patch is already applied; skipping."
-          else
-            echo "::error::The NetHunter Wi-Fi injection patch does not match this source revision."
-            echo "::error::Patch was not forced; inspect the failed hunk before continuing."
-            exit 1
-          fi
-'''
+                  if: env.ENABLE_NETHUNTER == 'true'
+                  shell: bash
+                  run: |
+                    set -euo pipefail
+                    cd "$GITHUB_WORKSPACE/device_kernel"
+                    patch_file="patches/nethunter/kali-wifi-injection-4.9.patch"
+          
+                    test -s "$patch_file" || {
+                      echo "::error::NetHunter is enabled, but $patch_file is missing."
+                      exit 1
+                    }
+          
+                    if git apply --check "$patch_file"; then
+                      git apply "$patch_file"
+                      echo "Applied source-matched Kali Linux 4.9 Wi-Fi injection patch."
+                    elif git apply --reverse --check "$patch_file"; then
+                      echo "NetHunter Wi-Fi injection patch is already applied; skipping."
+                    else
+                      echo "::error::The NetHunter Wi-Fi injection patch does not match this source revision."
+                      echo "::error::Patch was not forced; inspect the failed hunk before continuing."
+                      exit 1
+                    fi
+          '''
               marker = "      - name: Get Kernel Arch\n"
               if ready.count(marker) != 1:
                   raise SystemExit("Expected exactly one Get Kernel Arch step when inserting NetHunter patch.")
               ready = ready.replace(marker, nethunter_step + "\n" + marker, 1)
-
 
           # Rootless builds must not install KernelSU.
           old_ksu = "\n".join([
