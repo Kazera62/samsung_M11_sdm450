@@ -569,7 +569,7 @@ jobs:
                         require_config "$symbol"
                       done
                       echo "NetHunter kernel options validated: mac80211 injection, USB HID/configfs, and selected USB Wi-Fi drivers."
-                      grep -E '^CONFIG_(MAC80211|USB_CONFIGFS_F_HID|USB_F_HID|IKCONFIG|IKCONFIG_PROC)=y
+                      grep -E '^CONFIG_(MAC80211|USB_CONFIGFS_F_HID|USB_F_HID|IKCONFIG|IKCONFIG_PROC)=y'
                     else
                       for symbol in \
                         CONFIG_MAC80211 CONFIG_MAC80211_RC_MINSTREL CONFIG_MAC80211_RC_MINSTREL_HT \
