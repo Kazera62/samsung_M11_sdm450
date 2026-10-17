@@ -192,9 +192,411 @@ jobs:
 
           ready_path = Path(".github/workflows/build-ready/action.yml")
           ready = ready_path.read_text()
-# Apply NetHunter before framework hook/root patching can alter shared source files.
+
+          # Apply NetHunter before framework hook/root patching can alter shared source files.
           if "name: Apply NetHunter Wi-Fi injection patch (Linux 4.9)" not in ready:
-              nethunter_step = r'''      - name: Ensure Non-root build has no root integration
+              nethunter_step = r'''      - name: Apply NetHunter Wi-Fi injection patch (Linux 4.9)
+        if: env.ENABLE_NETHUNTER == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/device_kernel"
+          patch_file="patches/nethunter/kali-wifi-injection-4.9.patch"
+
+          test -s "$patch_file" || {
+            echo "::error::NetHunter is enabled, but $patch_file is missing."
+            exit 1
+          }
+
+          if git apply --check "$patch_file"; then
+            git apply "$patch_file"
+            echo "Applied source-matched Kali Linux 4.9 Wi-Fi injection patch."
+          elif git apply --reverse --check "$patch_file"; then
+            echo "NetHunter Wi-Fi injection patch is already applied; skipping."
+          else
+            echo "::error::The NetHunter Wi-Fi injection patch does not match this source revision."
+            echo "::error::Patch was not forced; inspect the failed hunk before continuing."
+            exit 1
+          fi
+'''
+              marker = "      - name: Get Kernel Arch\n"
+              if ready.count(marker) != 1:
+                  raise SystemExit("Expected exactly one Get Kernel Arch step when inserting NetHunter patch.")
+              ready = ready.replace(marker, nethunter_step + "\n" + marker, 1)
+
+
+          # Rootless builds must not install KernelSU.
+          old_ksu = "\n".join([
+              "      - name: Set KernelSU",
+              "        shell: bash",
+              "",
+          ])
+          new_ksu = "\n".join([
+              "      - name: Set KernelSU",
+              "        if: env.ROOT_NAME != 'Non-root'",
+              "        shell: bash",
+              "",
+          ])
+          ready = replace_once(ready, old_ksu, new_ksu, "KernelSU setup step")
+
+          # The upstream SukiSU patch step enters drivers/kernelsu, which does not
+          # exist for Non-root. Keep the upstream step, but skip it for Non-root.
+          old_suki = "\n".join([
+              "      - name: SukiSU-Ultra Fixed",
+              "        shell: bash",
+              "",
+          ])
+          new_suki = "\n".join([
+              "      - name: SukiSU-Ultra Fixed",
+              "        if: env.ROOT_NAME != 'Non-root'",
+              "        shell: bash",
+              "",
+          ])
+          ready = replace_once(ready, old_suki, new_suki, "upstream SukiSU fixed step")
+
+          # Do not append KSU configuration for Non-root builds.
+          old_config = "\n".join([
+              "      - name: Set KSU and SUSFS for DEFCONFIG",
+              "        shell: bash",
+              "",
+          ])
+          new_config = "\n".join([
+              "      - name: Set KSU and SUSFS for DEFCONFIG",
+              "        if: env.ROOT_NAME != 'Non-root'",
+              "        shell: bash",
+              "",
+          ])
+          ready = replace_once(ready, old_config, new_config, "root config step")
+
+          # The framework hardcodes BakaSU to main. Preserve KERNELSU_BRANCH so
+          # SUSFS mode can pin a compatible BakaSU commit while still using the
+          # framework's official bakasu setup path and bundled SUSFS patch.
+          expression_prefix = "$" + "{{"
+          old_bakasu = "\n".join([
+              '            elif [[ "' + expression_prefix + ' env.KERNELSU_AUTO_FORK }}" == "bakasu" ]]; then',
+              '                KERNELSU_AUTHOR="Baka-SU"',
+              '                KERNELSU_NAME="BakaSU"',
+              '                KERNELSU_ORIGIN_BRANCH="main"',
+              '                if [[ "' + expression_prefix + ' env.SUSFS_ENABLE }}" == "true" ]]; then',
+              '                    KERNELSU_BRANCH="main"',
+              '                else',
+              '                    KERNELSU_BRANCH="main"',
+              '                fi',
+          ])
+          new_bakasu = "\n".join([
+              '            elif [[ "' + expression_prefix + ' env.KERNELSU_AUTO_FORK }}" == "bakasu" ]]; then',
+              '                KERNELSU_AUTHOR="Baka-SU"',
+              '                KERNELSU_NAME="BakaSU"',
+              '                KERNELSU_ORIGIN_BRANCH="main"',
+              '                KERNELSU_BRANCH="${KERNELSU_BRANCH:-main}"',
+          ])
+          ready = replace_once(ready, old_bakasu, new_bakasu, "BakaSU branch selector")
+          ready_path.write_text(ready)
+
+          # The optional SUSFS hunks below target APIs not present in this Samsung
+          # Linux 4.9 tree. Retain the core path/mount feature set for this build.
+          susfs_action_path = Path(".github/workflows/patch-susfs/action.yml")
+          susfs_action = susfs_action_path.read_text()
+          for feature in (
+              "SUS_KSTAT",
+              "SPOOF_CMDLINE_OR_BOOTCONFIG",
+              "OPEN_REDIRECT",
+              "SUS_MAP",
+          ):
+              pattern = re.compile(
+                  rf'(?m)^ *echo "CONFIG_KSU_SUSFS_{feature}=y" >> .*$'
+              )
+              susfs_action, count = pattern.subn("", susfs_action)
+              if count != 1:
+                  raise SystemExit(
+                      f"Expected one optional SUSFS config line for {feature}, found {count}."
+                  )
+
+          # Embed the Samsung 4.9 compatibility hunk in this workflow instead
+          # of adding a separate patch directory to the kernel source.
+          fixed_start = susfs_action.find("      - name: SUSFS Patch Fixed")
+          upload_start = susfs_action.find("      - name: Upload Build Patch Rejected Files", fixed_start)
+          if fixed_start < 0 or upload_start < 0:
+              raise SystemExit("Could not locate the framework SUSFS fixed-patch step.")
+
+          inline_fixed_step = r'''      - name: SUSFS Patch Fixed
+                  if: env.SUSFS_ENABLE == 'true' && env.SUSFS_SKIP != 'true'
+                  shell: bash
+                  run: |
+                    set -euo pipefail
+                    cd "$GITHUB_WORKSPACE/device_kernel"
+          
+                    if [[ "$SUSFS_PATCH_FIXED" != "inline_samsung_49_compat" ]]; then
+                      echo "::error::Unexpected SUSFS compatibility selector."
+                      exit 1
+                    fi
+          
+                    python3 - <<'PY'
+                    from pathlib import Path
+          
+                    path = Path("fs/namespace.c")
+                    source = path.read_text()
+          
+                    header_block = """#ifdef CONFIG_KSU_SUSFS
+                    #include <linux/susfs_def.h>
+                    #endif // #ifdef CONFIG_KSU_SUSFS
+                    """
+                    header_marker = "#include <linux/fslog.h>\n"
+                    if "#include <linux/susfs_def.h>" not in source:
+                        if source.count(header_marker) != 1:
+                            raise SystemExit("Cannot locate the Samsung fslog include for SUSFS compatibility.")
+                        source = source.replace(header_marker, header_block + header_marker, 1)
+          
+                    mount_block = """#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+                    extern bool susfs_is_current_ksu_domain(void);
+                    extern struct static_key_true susfs_is_sdcard_android_data_not_decrypted;
+                    
+                    #define CL_COPY_MNT_NS BIT(25) /* used by copy_mnt_ns() */
+                    
+                    #endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+                    """
+                    if "CL_COPY_MNT_NS BIT(25)" not in source:
+                        anchor = '#include "internal.h"\n'
+                        if source.count(anchor) != 1:
+                            raise SystemExit("Cannot locate the namespace include anchor for SUSFS compatibility.")
+                        source = source.replace(anchor, anchor + "\n" + mount_block, 1)
+          
+                    for required in (
+                        "#include <linux/susfs_def.h>",
+                        "susfs_is_current_ksu_domain",
+                        "susfs_is_sdcard_android_data_not_decrypted",
+                        "CL_COPY_MNT_NS BIT(25)",
+                    ):
+                        if required not in source:
+                            raise SystemExit(f"SUSFS compatibility adjustment missing: {required}")
+          
+                    path.write_text(source)
+                    print("Applied inline Samsung Linux 4.9 SUSFS namespace compatibility.")
+                    PY
+          
+          '''
+          # Keep rejected-hunk diagnostics in the build log, but do not publish a
+          # separate patch_rejected_files artifact. The kernel ZIP is the only
+          # artifact intended for normal successful builds.
+          susfs_action = susfs_action[:fixed_start] + inline_fixed_step
+          susfs_action_path.write_text(susfs_action)
+          # Keep runner setup lighter: skip optional package purging and compilation
+          # of Coccinelle, which is not used by this build path.
+          env_path = Path(".github/workflows/build-env/action.yml")
+          env_text = env_path.read_text()
+          env_text = replace_once(
+              env_text,
+              "large-packages: true",
+              "large-packages: false",
+              "large package cleanup option",
+          )
+
+          expression_prefix = "$" + "{{"
+          newer_marker = 'elif [ "' + expression_prefix + ' env.SYSTEM_VERSION }}" == "newer" ]; then'
+          arch_marker = 'elif [ "' + expression_prefix + ' env.SYSTEM_VERSION }}" == "arch" ]; then'
+          section_start = env_text.index(newer_marker)
+          section_end = env_text.index(arch_marker, section_start)
+          newer_section = env_text[section_start:section_end]
+          coccinelle_start = newer_section.index("            # Install Coccinelle\n")
+          coccinelle_end = newer_section.index("            # Install Libtinfo5\n", coccinelle_start)
+          newer_section = (
+              newer_section[:coccinelle_start]
+              + "            # Coccinelle is not used by this kernel build path; skip building it.\n\n"
+              + newer_section[coccinelle_end:]
+          )
+          env_text = env_text[:section_start] + newer_section + env_text[section_end:]
+          env_path.write_text(env_text)
+          process_path = Path(".github/workflows/build-process/action.yml")
+          process = process_path.read_text()
+          config_validation_marker = "          # KPM Detect\n"
+          config_validation_hook = r'''          # Validate the final Kconfig output before any kernel compilation.
+                    config="$GITHUB_WORKSPACE/device_kernel/out/.config"
+                    if [[ ! -s "$config" ]]; then
+                      echo "::error::Final kernel .config was not generated; refusing to compile."
+                      exit 1
+                    fi
+
+                    # Optional Kali NetHunter kernel features.
+                    test -x ./scripts/config || {
+                      echo "::error::scripts/config is missing from the kernel source."
+                      exit 1
+                    }
+
+                    if [[ "${ENABLE_NETHUNTER:-false}" == "true" ]]; then
+                      for symbol in \
+                        CFG80211 MAC80211 MAC80211_RC_MINSTREL MAC80211_RC_MINSTREL_HT \
+                        CFG80211_INTERNAL_REGDB USB_GADGET USB_CONFIGFS \
+                        USB_CONFIGFS_F_HID USB_CONFIGFS_MASS_STORAGE USB_G_ANDROID \
+                        ATH9K_HTC RTL8187 RTL8192CU RT2X00 RT2800USB; do
+                        ./scripts/config --file "$config" --enable "$symbol"
+                      done
+                      echo "NetHunter enabled: injection patch, mac80211, HID configfs, and USB Wi-Fi drivers requested."
+                    else
+                      # Keep Android's required USB gadget/configfs functions intact.
+                      # Disable the optional NetHunter wireless/injection stack and HID function.
+                      for symbol in \
+                        MAC80211 MAC80211_RC_MINSTREL MAC80211_RC_MINSTREL_HT \
+                        USB_CONFIGFS_F_HID USB_F_HID ATH9K_HTC RTL8187 RTL8192CU \
+                        RT2X00 RT2800USB; do
+                        ./scripts/config --file "$config" --disable "$symbol"
+                      done
+                      echo "NetHunter disabled: optional mac80211, injection-related USB HID, and external USB Wi-Fi drivers disabled; Android USB gadget retained."
+                    fi
+
+                    # Re-apply CPU governor and timer choices to the final output config
+                    # after defconfig and any optional config merges.
+                    case "$CPU_DEFAULT_GOVERNOR" in
+                      performance|powersave|userspace|ondemand|conservative|schedutil) cpu_gov_upper="$(printf '%s' "$CPU_DEFAULT_GOVERNOR" | tr '[:lower:]' '[:upper:]')" ;;
+                      *) echo "::error::Invalid CPU governor selection: $CPU_DEFAULT_GOVERNOR"; exit 1 ;;
+                    esac
+                    sed -i -E '/^(CONFIG_CPU_FREQ_DEFAULT_GOV_(PERFORMANCE|POWERSAVE|USERSPACE|ONDEMAND|CONSERVATIVE|INTERACTIVE|SCHEDUTIL)=y|# CONFIG_CPU_FREQ_DEFAULT_GOV_(PERFORMANCE|POWERSAVE|USERSPACE|ONDEMAND|CONSERVATIVE|INTERACTIVE|SCHEDUTIL) is not set)$/d' "$config"
+                    printf 'CONFIG_CPU_FREQ_DEFAULT_GOV_%s=y\n' "$cpu_gov_upper" >> "$config"
+
+                    case "$CONFIG_HZ_VALUE" in
+                      100|250|300|1000) ;;
+                      *) echo "::error::Invalid CONFIG_HZ selection: $CONFIG_HZ_VALUE"; exit 1 ;;
+                    esac
+                    sed -i -E '/^(CONFIG_HZ_(100|250|300|1000)=y|# CONFIG_HZ_(100|250|300|1000) is not set|CONFIG_HZ=[0-9]+)$/d' "$config"
+                    printf 'CONFIG_HZ_%s=y\n' "$CONFIG_HZ_VALUE" >> "$config"
+
+                    # Recalculate derived CONFIG_HZ and normalize Kconfig selections.
+                    make CC="ccache clang" CLANG_TRIPLE=aarch64-linux-gnu- LD_LIBRARY_PATH="$GITHUB_WORKSPACE/clang-custom/lib64" DTC_EXT="$GITHUB_WORKSPACE/device_kernel/tools/dtc" CONFIG_BUILD_ARM64_DT_OVERLAY=y LOCALVERSION="-$KERNEL_NAME" O=out ARCH=arm64 olddefconfig
+
+                    config="$GITHUB_WORKSPACE/device_kernel/out/.config"
+                    require_config() {
+                      if ! grep -Fqx -- "$1" "$config"; then
+                        echo "::error::Kconfig rejected selected option: $1"
+                        exit 1
+                      fi
+                    }
+
+                    case "$CPU_DEFAULT_GOVERNOR" in
+                      performance|powersave|userspace|ondemand|conservative|schedutil) cpu_gov_upper="$(printf '%s' "$CPU_DEFAULT_GOVERNOR" | tr '[:lower:]' '[:upper:]')" ;;
+                      *) echo "::error::Invalid CPU governor selection: $CPU_DEFAULT_GOVERNOR"; exit 1 ;;
+                    esac
+                    require_config "CONFIG_CPU_FREQ_GOV_$cpu_gov_upper=y"
+                    require_config "CONFIG_CPU_FREQ_DEFAULT_GOV_$cpu_gov_upper=y"
+                    cpu_gov_count="$(grep -Ec '^CONFIG_CPU_FREQ_DEFAULT_GOV_[A-Z0-9_]+=y$' "$config" || true)"
+                    if [[ "$cpu_gov_count" != "1" ]]; then
+                      echo "::error::Expected exactly one enabled default CPU governor, found $cpu_gov_count."
+                      exit 1
+                    fi
+
+                    case "$IO_DEFAULT_SCHEDULER" in
+                      cfq|noop) io_upper="$(printf '%s' "$IO_DEFAULT_SCHEDULER" | tr '[:lower:]' '[:upper:]')" ;;
+                      *) echo "::error::Invalid I/O scheduler selection: $IO_DEFAULT_SCHEDULER"; exit 1 ;;
+                    esac
+                    require_config "CONFIG_IOSCHED_$io_upper=y"
+                    require_config "CONFIG_DEFAULT_$io_upper=y"
+                    require_config "CONFIG_DEFAULT_IOSCHED=\"$IO_DEFAULT_SCHEDULER\""
+                    io_count="$(grep -Ec '^CONFIG_DEFAULT_(DEADLINE|CFQ|NOOP)=y$' "$config" || true)"
+                    if [[ "$io_count" != "1" ]]; then
+                      echo "::error::Expected exactly one default I/O scheduler, found $io_count."
+                      exit 1
+                    fi
+
+                    case "$TCP_DEFAULT_CONGESTION" in
+                      bic|cubic|htcp|westwood|reno) tcp_lower="$TCP_DEFAULT_CONGESTION"; tcp_upper="$(printf '%s' "$tcp_lower" | tr '[:lower:]' '[:upper:]')" ;;
+                      *) echo "::error::Invalid TCP congestion selection: $TCP_DEFAULT_CONGESTION"; exit 1 ;;
+                    esac
+                    if [[ "$tcp_lower" != "reno" ]]; then
+                      require_config "CONFIG_TCP_CONG_$tcp_upper=y"
+                    fi
+                    require_config "CONFIG_DEFAULT_$tcp_upper=y"
+                    require_config "CONFIG_DEFAULT_TCP_CONG=\"$tcp_lower\""
+                    tcp_count="$(grep -Ec '^CONFIG_DEFAULT_(BIC|CUBIC|HTCP|HYBLA|VEGAS|VENO|WESTWOOD|DCTCP|CDG|BBR|RENO)=y$' "$config" || true)"
+                    if [[ "$tcp_count" != "1" ]]; then
+                      echo "::error::Expected exactly one default TCP congestion algorithm, found $tcp_count."
+                      exit 1
+                    fi
+
+                    case "$CONFIG_HZ_VALUE" in
+                      100|250|300|1000) ;;
+                      *) echo "::error::Invalid CONFIG_HZ selection: $CONFIG_HZ_VALUE"; exit 1 ;;
+                    esac
+                    require_config "CONFIG_HZ_$CONFIG_HZ_VALUE=y"
+                    require_config "CONFIG_HZ=$CONFIG_HZ_VALUE"
+                    hz_count="$(grep -Ec '^CONFIG_HZ_[0-9]+=y$' "$config" || true)"
+                    if [[ "$hz_count" != "1" ]]; then
+                      echo "::error::Expected exactly one enabled CONFIG_HZ choice, found $hz_count."
+                      exit 1
+                    fi
+
+                    if [[ "${ENABLE_NETHUNTER:-false}" == "true" ]]; then
+                      for symbol in \
+                        CONFIG_CFG80211=y \
+                        CONFIG_MAC80211=y \
+                        CONFIG_MAC80211_HAS_RC=y \
+                        CONFIG_MAC80211_RC_MINSTREL_HT=y \
+                        CONFIG_CFG80211_INTERNAL_REGDB=y \
+                        CONFIG_USB_GADGET=y \
+                        CONFIG_USB_CONFIGFS=y \
+                        CONFIG_USB_CONFIGFS_F_HID=y \
+                        CONFIG_USB_CONFIGFS_MASS_STORAGE=y \
+                        CONFIG_USB_G_ANDROID=y \
+                        CONFIG_ATH9K_HTC=y \
+                        CONFIG_RTL8187=y \
+                        CONFIG_RTL8192CU=y \
+                        CONFIG_RT2X00=y \
+                        CONFIG_RT2800USB=y; do
+                        require_config "$symbol"
+                      done
+                      echo "NetHunter kernel options validated: mac80211 injection, USB HID/configfs, and selected USB Wi-Fi drivers."
+                    else
+                      for symbol in \
+                        CONFIG_MAC80211 CONFIG_MAC80211_RC_MINSTREL CONFIG_MAC80211_RC_MINSTREL_HT \
+                        CONFIG_USB_CONFIGFS_F_HID CONFIG_USB_F_HID CONFIG_ATH9K_HTC \
+                        CONFIG_RTL8187 CONFIG_RTL8192CU CONFIG_RT2X00 CONFIG_RT2800USB; do
+                        if grep -Fqx "$symbol=y" "$config"; then
+                          echo "::error::NetHunter-disabled build unexpectedly enabled $symbol."
+                          exit 1
+                        fi
+                      done
+                      echo "NetHunter-disabled configuration validated; Android USB gadget support remains enabled."
+                    fi
+
+                    case "$ZRAM_COMPRESSION" in
+                      lzo|lz4) zram_upper="$(printf '%s' "$ZRAM_COMPRESSION" | tr '[:lower:]' '[:upper:]')" ;;
+                      *) echo "::error::Invalid zRAM compression selection: $ZRAM_COMPRESSION"; exit 1 ;;
+                    esac
+                    require_config "CONFIG_ZRAM=y"
+                    require_config "CONFIG_CRYPTO_$zram_upper=y"
+                    zram_driver="$GITHUB_WORKSPACE/device_kernel/drivers/block/zram/zram_drv.c"
+                    if ! grep -Fqx "static const char *default_compressor = \"$ZRAM_COMPRESSION\";" "$zram_driver"; then
+                      echo "::error::Selected zRAM compressor was not retained in zram_drv.c."
+                      exit 1
+                    fi
+                    compression_count="$(grep -Ec '^static const char [*]default_compressor = "(lzo|lz4)";$' "$zram_driver" || true)"
+                    if [[ "$compression_count" != "1" ]]; then
+                      echo "::error::Expected exactly one supported zRAM default compressor declaration, found $compression_count."
+                      exit 1
+                    fi
+
+                    echo "Kernel default selections validated against out/.config and zram_drv.c."
+                    # KPM Detect
+          '''
+          process = replace_once(process, config_validation_marker, config_validation_hook, "post-defconfig option-validation hook")
+
+          # The upstream error-artifact step still uses upload-artifact v4 (Node 20).
+          # Upgrade that reference to the Node 24-compatible v7 to avoid runner warnings.
+          upload_v4 = re.compile(r"(?m)^([ \t]*uses:[ \t]*actions/upload-artifact)@v4(?:\.[0-9.]+)?[ \t]*$")
+          process, upload_v4_count = upload_v4.subn(r"\1@v7", process)
+          if upload_v4_count:
+              print(f"Upgraded {upload_v4_count} upload-artifact v4 reference(s) to v7.")
+          else:
+              print("No upload-artifact v4 reference found in build-process; no runtime upgrade needed.")
+
+          process_path.write_text(process)
+          print("Framework actions adjusted: rootless setup is skipped, SUSFS compatibility is inline, and selected kernel defaults are validated.")
+          PY
+
+      - name: Prepare build environment
+        uses: ./.github/workflows/build-env
+
+      - name: Fetch toolchains and kernel source
+        uses: ./.github/workflows/build-ready
+
+      - name: Ensure Non-root build has no root integration
         if: inputs.root == 'Non-root'
         shell: bash
         run: |
