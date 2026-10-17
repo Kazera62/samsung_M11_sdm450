@@ -426,7 +426,9 @@ jobs:
                         CFG80211 MAC80211 MAC80211_RC_MINSTREL MAC80211_RC_MINSTREL_HT \
                         CFG80211_INTERNAL_REGDB USB_GADGET USB_CONFIGFS \
                         USB_CONFIGFS_F_HID USB_CONFIGFS_MASS_STORAGE USB_G_ANDROID \
-                        ATH9K_HTC RTL8187 RTL8192CU RT2X00 RT2800USB; do
+                        WLAN_VENDOR_ATH ATH9K_HTC \
+                        WLAN_VENDOR_REALTEK RTL_CARDS RTL8187 RTL8192CU \
+                        WLAN_VENDOR_RALINK RT2X00 RT2800USB; do
                         ./scripts/config --file "$config" --enable "$symbol"
                       done
                       echo "NetHunter enabled: injection patch, mac80211, HID configfs, and USB Wi-Fi drivers requested."
@@ -435,8 +437,10 @@ jobs:
                       # Disable the optional NetHunter wireless/injection stack and HID function.
                       for symbol in \
                         MAC80211 MAC80211_RC_MINSTREL MAC80211_RC_MINSTREL_HT \
-                        USB_CONFIGFS_F_HID USB_F_HID ATH9K_HTC RTL8187 RTL8192CU \
-                        RT2X00 RT2800USB; do
+                        USB_CONFIGFS_F_HID USB_F_HID \
+                        WLAN_VENDOR_ATH ATH9K_HTC \
+                        WLAN_VENDOR_REALTEK RTL_CARDS RTL8187 RTL8192CU \
+                        WLAN_VENDOR_RALINK RT2X00 RT2800USB; do
                         ./scripts/config --file "$config" --disable "$symbol"
                       done
                       echo "NetHunter disabled: optional mac80211, injection-related USB HID, and external USB Wi-Fi drivers disabled; Android USB gadget retained."
@@ -533,9 +537,13 @@ jobs:
                         CONFIG_USB_CONFIGFS_F_HID=y \
                         CONFIG_USB_CONFIGFS_MASS_STORAGE=y \
                         CONFIG_USB_G_ANDROID=y \
+                        CONFIG_WLAN_VENDOR_ATH=y \
                         CONFIG_ATH9K_HTC=y \
+                        CONFIG_WLAN_VENDOR_REALTEK=y \
+                        CONFIG_RTL_CARDS=y \
                         CONFIG_RTL8187=y \
                         CONFIG_RTL8192CU=y \
+                        CONFIG_WLAN_VENDOR_RALINK=y \
                         CONFIG_RT2X00=y \
                         CONFIG_RT2800USB=y; do
                         require_config "$symbol"
@@ -544,8 +552,10 @@ jobs:
                     else
                       for symbol in \
                         CONFIG_MAC80211 CONFIG_MAC80211_RC_MINSTREL CONFIG_MAC80211_RC_MINSTREL_HT \
-                        CONFIG_USB_CONFIGFS_F_HID CONFIG_USB_F_HID CONFIG_ATH9K_HTC \
-                        CONFIG_RTL8187 CONFIG_RTL8192CU CONFIG_RT2X00 CONFIG_RT2800USB; do
+                        CONFIG_USB_CONFIGFS_F_HID CONFIG_USB_F_HID \
+                        CONFIG_WLAN_VENDOR_ATH CONFIG_ATH9K_HTC \
+                        CONFIG_WLAN_VENDOR_REALTEK CONFIG_RTL_CARDS CONFIG_RTL8187 CONFIG_RTL8192CU \
+                        CONFIG_WLAN_VENDOR_RALINK CONFIG_RT2X00 CONFIG_RT2800USB; do
                         if grep -Fqx "$symbol=y" "$config"; then
                           echo "::error::NetHunter-disabled build unexpectedly enabled $symbol."
                           exit 1
