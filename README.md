@@ -22,7 +22,7 @@ Defconfig utama: `a11q_open_defconfig`. Workflow menerapkan dan memvalidasi pili
 
 ## Kali NetHunter kernel features
 
-Aktifkan **Enable NetHunter = true** saat menjalankan workflow untuk mengaktifkan konfigurasi mac80211 injection, USB HID/configfs, dan driver Wi-Fi USB yang tersedia di source 4.9.
+Aktifkan **Enable NetHunter = true** saat menjalankan workflow untuk mengaktifkan konfigurasi mac80211 injection, USB HID/configfs, dan driver Wi-Fi USB yang tersedia di source 4.9. Jika toggle `false`, fitur mac80211/injection, USB HID configfs, dan driver Wi-Fi USB eksternal opsional dinonaktifkan, tetapi konfigurasi USB Android yang dibutuhkan untuk fungsi ponsel tetap dipertahankan.
 
 Ketika opsi itu aktif, workflow:
 1. Menerapkan `patches/nethunter/kali-wifi-injection-4.9.patch` menggunakan `git apply --check` terlebih dahulu. Build berhenti jika patch tidak cocok dengan source; patch tidak dipaksakan.
