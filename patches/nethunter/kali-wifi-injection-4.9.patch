@@ -8,7 +8,7 @@
  		ieee80211_hw_config(local, 0);
 --- a/net/mac80211/tx.c
 +++ b/net/mac80211/tx.c
-@@ -822,4 +822,7 @@ ieee80211_tx_h_sequence
+@@ -822,4 +822,8 @@ ieee80211_tx_h_sequence
 -	if (unlikely(info->control.vif->type == NL80211_IFTYPE_MONITOR))
 -		return TX_CONTINUE;
 +	if (unlikely((info->flags & IEEE80211_TX_CTL_INJECTED) &&
