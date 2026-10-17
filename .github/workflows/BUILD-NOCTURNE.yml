@@ -27,6 +27,11 @@ on:
         options:
           - Non-root
           - BakaSU + SUSFS
+      enable_nethunter:
+        description: "Enable NetHunter Wi-Fi injection, HID gadget, and USB Wi-Fi drivers"
+        required: true
+        type: boolean
+        default: false
       cpu_default_governor:
         description: "Default CPU governor (options enabled in the current defconfig)"
         required: true
@@ -88,6 +93,7 @@ env:
   # The workflow's selected Git ref is also the kernel source branch.
   KERNEL_BRANCH: "${{ github.ref_name }}"
   ROOT_NAME: "${{ inputs.root }}"
+  ENABLE_NETHUNTER: "${{ inputs.enable_nethunter && 'true' || 'false' }}"
   CPU_DEFAULT_GOVERNOR: "${{ inputs.cpu_default_governor }}"
   IO_DEFAULT_SCHEDULER: "${{ inputs.io_default_scheduler }}"
   ZRAM_COMPRESSION: "${{ inputs.compression_algorithm }}"
@@ -378,6 +384,22 @@ jobs:
                       exit 1
                     fi
 
+                    # Optional Kali NetHunter kernel features.
+                    if [[ "${ENABLE_NETHUNTER:-false}" == "true" ]]; then
+                      test -x ./scripts/config || {
+                        echo "::error::scripts/config is missing from the kernel source."
+                        exit 1
+                      }
+                      for symbol in \
+                        CFG80211 MAC80211 MAC80211_RC_MINSTREL MAC80211_RC_MINSTREL_HT \
+                        CFG80211_INTERNAL_REGDB USB_GADGET USB_CONFIGFS \
+                        USB_CONFIGFS_F_HID USB_CONFIGFS_MASS_STORAGE USB_G_ANDROID \
+                        ATH9K_HTC RTL8187 RTL8192CU RT2X00 RT2800USB; do
+                        ./scripts/config --file "$config" --enable "$symbol"
+                      done
+                      echo "NetHunter: requested kernel options added; Kconfig dependencies will be resolved by olddefconfig."
+                    fi
+
                     # Re-apply CPU governor and timer choices to the final output config
                     # after defconfig and any optional config merges.
                     case "$CPU_DEFAULT_GOVERNOR" in
@@ -457,6 +479,28 @@ jobs:
                       exit 1
                     fi
 
+                    if [[ "${ENABLE_NETHUNTER:-false}" == "true" ]]; then
+                      for symbol in \
+                        CONFIG_CFG80211=y \
+                        CONFIG_MAC80211=y \
+                        CONFIG_MAC80211_HAS_RC=y \
+                        CONFIG_MAC80211_RC_MINSTREL_HT=y \
+                        CONFIG_CFG80211_INTERNAL_REGDB=y \
+                        CONFIG_USB_GADGET=y \
+                        CONFIG_USB_CONFIGFS=y \
+                        CONFIG_USB_CONFIGFS_F_HID=y \
+                        CONFIG_USB_CONFIGFS_MASS_STORAGE=y \
+                        CONFIG_USB_G_ANDROID=y \
+                        CONFIG_ATH9K_HTC=y \
+                        CONFIG_RTL8187=y \
+                        CONFIG_RTL8192CU=y \
+                        CONFIG_RT2X00=y \
+                        CONFIG_RT2800USB=y; do
+                        require_config "$symbol"
+                      done
+                      echo "NetHunter kernel options validated: mac80211 injection, USB HID/configfs, and selected USB Wi-Fi drivers."
+                    fi
+
                     case "$ZRAM_COMPRESSION" in
                       lzo|lz4) zram_upper="$(printf '%s' "$ZRAM_COMPRESSION" | tr '[:lower:]' '[:upper:]')" ;;
                       *) echo "::error::Invalid zRAM compression selection: $ZRAM_COMPRESSION"; exit 1 ;;
@@ -497,6 +541,30 @@ jobs:
 
       - name: Fetch toolchains and kernel source
         uses: ./.github/workflows/build-ready
+
+      - name: Apply NetHunter Wi-Fi injection patch (Linux 4.9)
+        if: env.ENABLE_NETHUNTER == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/device_kernel"
+          patch_file="patches/nethunter/kali-wifi-injection-4.9.patch"
+
+          test -s "$patch_file" || {
+            echo "::error::NetHunter is enabled, but $patch_file is missing."
+            exit 1
+          }
+
+          if git apply --check "$patch_file"; then
+            git apply "$patch_file"
+            echo "Applied Kali Linux 4.9 Wi-Fi injection patch."
+          elif git apply --reverse --check "$patch_file"; then
+            echo "NetHunter Wi-Fi injection patch is already applied; skipping."
+          else
+            echo "::error::The NetHunter Wi-Fi injection patch does not cleanly apply to this kernel source."
+            echo "::error::Do not force it; adapt the patch to this source revision first."
+            exit 1
+          fi
 
       - name: Ensure Non-root build has no root integration
         if: inputs.root == 'Non-root'
