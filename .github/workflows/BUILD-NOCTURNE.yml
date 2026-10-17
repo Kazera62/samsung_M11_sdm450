@@ -1212,10 +1212,8 @@ jobs:
           if [[ "$ENABLE_NETHUNTER" == "true" ]]; then
             nethunter_message=$(cat <<EOF
           Kali NetHunter: ENABLED
-          Device: Samsung Galaxy M11 / A11 (SDM450)
           Kernel: $KERNEL_NAME ($BUILT_KERNEL_RELEASE)
           Features: Wi-Fi injection, USB HID gadget, USB Wi-Fi drivers
-          Build: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
           EOF
             )
 
