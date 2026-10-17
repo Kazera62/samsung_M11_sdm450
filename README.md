@@ -27,6 +27,4 @@ Tambahkan secrets di **Settings → Secrets and variables → Actions**:
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
 
-Workflow menggunakan [NonGKI Kernel Build 2nd](https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd).
-
 Uji kernel sebelum digunakan sehari-hari. Simpan boot image yang berfungsi dan siapkan metode pemulihan sebelum flashing.
