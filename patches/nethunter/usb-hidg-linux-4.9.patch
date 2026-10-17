@@ -1,0 +1,38 @@
+From 8f4d6e1c9b5d9e6f000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: OpenAI <noreply@openai.com>
+Subject: [PATCH] usb: gadget: hid: log configfs HID bind lifecycle on 4.9
+
+Add explicit messages when f_hid creates or removes /dev/hidgN. This is
+diagnostic only: a HID gadget device node still appears only after a HID
+function is configured and the composite gadget is bound to a UDC.
+
+---
+ drivers/usb/gadget/function/f_hid.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/drivers/usb/gadget/function/f_hid.c b/drivers/usb/gadget/function/f_hid.c
+--- a/drivers/usb/gadget/function/f_hid.c
++++ b/drivers/usb/gadget/function/f_hid.c
+@@ -750,8 +750,9 @@ static int hidg_bind(struct usb_configuration *c, struct usb_function *f)
+ 	device = device_create(hidg_class, NULL, dev, NULL,
+ 			       "%s%d", "hidg", hidg->minor);
+ 	if (IS_ERR(device)) {
+ 		status = PTR_ERR(device);
+ 		goto del;
+ 	}
++	pr_info("f_hid: registered /dev/hidg%d (HID gadget bound)\n", hidg->minor);
+ 
+ 	return 0;
+ del:
+@@ -1002,9 +1003,10 @@ static void hidg_unbind(struct usb_configuration *c, struct usb_function *f)
+ {
+ 	struct f_hidg *hidg = func_to_hidg(f);
+ 
++	pr_info("f_hid: removing /dev/hidg%d (HID gadget unbound)\n", hidg->minor);
+ 	device_destroy(hidg_class, MKDEV(major, hidg->minor));
+ 	cdev_del(&hidg->cdev);
+ 
+ 	usb_free_all_descriptors(f);
+ }
+-- 
+2.43.0
