@@ -1207,3 +1207,31 @@ jobs:
               sys.exit(1)
           print("Telegram accepted the kernel ZIP with build report caption.")
           '
+
+          # Send a separate NetHunter notification only when the workflow toggle is enabled.
+          if [[ "$ENABLE_NETHUNTER" == "true" ]]; then
+            nethunter_message=$(cat <<EOF
+          Kali NetHunter: ENABLED
+          Device: Samsung Galaxy M11 / A11 (SDM450)
+          Kernel: $KERNEL_NAME ($BUILT_KERNEL_RELEASE)
+          Features: Wi-Fi injection, USB HID gadget, USB Wi-Fi drivers
+          Build: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+          EOF
+            )
+
+            nethunter_response="$(curl --fail-with-body --silent --show-error --retry 2 --max-time 30 \
+              --request POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              --form-string "chat_id=${TELEGRAM_CHAT_ID}" \
+              --form-string "text=$nethunter_message")"
+
+            printf '%s' "$nethunter_response" | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)
+          if not data.get("ok"):
+              print("Telegram NetHunter notification failed: " + str(data.get("description", "unknown API error")), file=sys.stderr)
+              sys.exit(1)
+          print("Telegram accepted the Kali NetHunter notification.")
+          '
+          else
+            echo "NetHunter Telegram notification skipped because ENABLE_NETHUNTER=false."
+          fi
