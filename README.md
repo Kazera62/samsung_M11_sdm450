@@ -26,8 +26,9 @@ Aktifkan **Enable NetHunter = true** saat menjalankan workflow untuk mengaktifka
 
 Ketika opsi itu aktif, workflow:
 1. Menerapkan `patches/nethunter/kali-wifi-injection-4.9.patch` menggunakan `git apply --check` terlebih dahulu. Build berhenti jika patch tidak cocok dengan source; patch tidak dipaksakan.
-2. Mengaktifkan konfigurasi yang diperlukan dengan `scripts/config`.
-3. Menjalankan `make olddefconfig` dan memvalidasi hasil akhirnya sebelum kompilasi.
+2. Menerapkan `patches/nethunter/usb-hidg-linux-4.9.patch` untuk menambahkan log bind/unbind dan kegagalan HID, dengan pemeriksaan patch sebelum diterapkan.
+3. Mengaktifkan konfigurasi yang diperlukan dengan `scripts/config`, lalu menjalankan `make olddefconfig`.
+4. Memvalidasi `.config` sebelum build dan memeriksa lagi `autoconf.h` setelah kompilasi. Build NetHunter diberi akhiran release `-NH` agar dapat dibedakan dari ZIP lama.
 
 Opsi mass-storage yang benar pada source ini adalah `CONFIG_USB_CONFIGFS_MASS_STORAGE` (bukan `CONFIG_USB_CONFIGFS_F_MASS_STORAGE`). `CONFIG_MAC80211_HAS_RC` adalah opsi internal yang dipilih oleh Kconfig; workflow memvalidasi hasilnya daripada memaksanya secara langsung.
 
@@ -39,7 +40,9 @@ Opsi mass-storage yang benar pada source ini adalah `CONFIG_USB_CONFIGFS_MASS_ST
   git apply patches/nethunter/kali-wifi-injection-4.9.patch
   ```
   Jangan mencampurkannya dengan patch mac80211 lama untuk kernel 3.x. Jika source berubah dan pemeriksaan gagal, periksa setiap hunk dan porting secara manual; jangan memaksa hunk masuk.
-- **HID keyboard/mouse:** source ini sudah memiliki `drivers/usb/gadget/function/f_hid.c`, `CONFIG_USB_CONFIGFS_F_HID`, dan konfigurasi configfs. Untuk kernel 4.x, jalur HID-4 menggunakan konfigurasi ini; patch HID lama untuk kernel 3.x tidak diperlukan pada source ini.
+- **HID keyboard/mouse:** source ini sudah memiliki `drivers/usb/gadget/function/f_hid.c`, `CONFIG_USB_CONFIGFS_F_HID`, dan dukungan configfs; patch HID lama untuk kernel 3.x tidak diperlukan. Patch `usb-hidg-linux-4.9.patch` hanya menambahkan pesan diagnostik saat fungsi HID di-bind/unbind atau gagal bind.
+- **Penting:** `CONFIG_USB_CONFIGFS_F_HID=y` tidak otomatis membuat `/dev/hidg0`. Node itu dibuat saat fungsi `hid.usbN` benar-benar dikonfigurasi dan gadget di-bind ke UDC. Kernel tidak otomatis mengganti gadget Android `USB_G_ANDROID` ke configfs; pengaturan runtime harus dilakukan oleh userspace/init yang sesuai dan tidak boleh mengambil alih UDC yang masih dipakai Android.
+- Pada build NetHunter, workflow mengaktifkan `CONFIG_IKCONFIG_PROC=y` agar konfigurasi kernel yang benar-benar berjalan dapat diperiksa melalui `zcat /proc/config.gz`. Akhiran `-NH` pada `uname -r` membantu membedakan build ini dari ZIP NetHunter lama atau kernel non-NetHunter.
 - **USB Wi-Fi:** konfigurasi mencakup `ATH9K_HTC`, `RTL8187`, `RTL8192CU`, dan `RT2800USB`. Adapter tetap membutuhkan chipset yang didukung, firmware yang sesuai tersedia di Android, dukungan USB host/OTG, serta daya OTG yang cukup.
 
 **Catatan:** ini mengaktifkan fitur sisi kernel, bukan memasang Kali chroot, aplikasi NetHunter, atau seluruh userspace secara otomatis. Dukungan injection berbeda antar-adapter dan perlu diuji dengan perangkat yang kompatibel.
