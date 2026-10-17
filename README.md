@@ -33,8 +33,13 @@ Opsi mass-storage yang benar pada source ini adalah `CONFIG_USB_CONFIGFS_MASS_ST
 
 ### Patch source kernel 4.9
 
-- **Wi-Fi injection:** patch 4.9 di atas berasal dari jalur patch Kali NetHunter. Jangan mencampurkannya dengan patch mac80211 lama untuk kernel 3.x. Jika source kernel berubah dan patch tidak lagi cocok, periksa hunk yang gagal lalu porting secara manual; jangan menggunakan `git apply --reject` atau memaksa semua hunk.
-- **HID keyboard/mouse:** source ini sudah memiliki `drivers/usb/gadget/function/f_hid.c`, `CONFIG_USB_CONFIGFS_F_HID`, dan konfigurasi configfs. Untuk kernel 4.x, aktifkan jalur HID/configfs ini; patch HID lama untuk kernel 3.x tidak perlu diterapkan tanpa alasan khusus.
+- **Wi-Fi injection:** patch disesuaikan dari [Kali Linux Wi-Fi injection patch for 4.9](https://gitlab.com/kalilinux/build-scripts/kali-arm/-/blob/main/patches/kali-wifi-injection-4.9.patch). Workflow menguji patch dengan `git apply --check` lalu menerapkannya. Untuk pemeriksaan manual dari root source:
+  ```sh
+  git apply --check patches/nethunter/kali-wifi-injection-4.9.patch
+  git apply patches/nethunter/kali-wifi-injection-4.9.patch
+  ```
+  Jangan mencampurkannya dengan patch mac80211 lama untuk kernel 3.x. Jika source berubah dan pemeriksaan gagal, periksa setiap hunk dan porting secara manual; jangan memaksa hunk masuk.
+- **HID keyboard/mouse:** source ini sudah memiliki `drivers/usb/gadget/function/f_hid.c`, `CONFIG_USB_CONFIGFS_F_HID`, dan konfigurasi configfs. Untuk kernel 4.x, jalur HID-4 menggunakan konfigurasi ini; patch HID lama untuk kernel 3.x tidak diperlukan pada source ini.
 - **USB Wi-Fi:** konfigurasi mencakup `ATH9K_HTC`, `RTL8187`, `RTL8192CU`, dan `RT2800USB`. Adapter tetap membutuhkan chipset yang didukung, firmware yang sesuai tersedia di Android, dukungan USB host/OTG, serta daya OTG yang cukup.
 
 **Catatan:** ini mengaktifkan fitur sisi kernel, bukan memasang Kali chroot, aplikasi NetHunter, atau seluruh userspace secara otomatis. Dukungan injection berbeda antar-adapter dan perlu diuji dengan perangkat yang kompatibel.
