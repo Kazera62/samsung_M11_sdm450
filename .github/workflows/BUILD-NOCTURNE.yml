@@ -971,8 +971,7 @@ jobs:
             exit 1
           }
 
-          # Also inspect the config embedded into the actual kernel image.
-          # autoconf.h alone cannot guarantee /proc/config.gz reports the same settings.
+          # Verify settings embedded in the actual image, not only generated headers.
           image="$build_dir/arch/arm64/boot/Image"
           embedded_config="$build_dir/embedded-kernel.config"
           test -s "$image" || {
@@ -984,9 +983,22 @@ jobs:
             exit 1
           }
 
-          grep -Fqx "CONFIG_CPU_FREQ_DEFAULT_GOV_${cpu_gov_upper}=y" "$embedded_config" || {
+          if ! grep -Fqx "CONFIG_CPU_FREQ_DEFAULT_GOV_${cpu_gov_upper}=y" "$embedded_config"; then
             echo "::error::Embedded kernel config does not match selected CPU governor: $CPU_DEFAULT_GOVERNOR"
-            grep '^CONFIG_CPU_FREQ_DEFAULT_GOV_.*=y
+            exit 1
+          fi
+          if ! grep -Fqx "CONFIG_HZ=$CONFIG_HZ_VALUE" "$embedded_config"; then
+            echo "::error::Embedded kernel config HZ does not match selected value $CONFIG_HZ_VALUE."
+            exit 1
+          fi
+          if ! grep -Fqx "CONFIG_HZ_${CONFIG_HZ_VALUE}=y" "$embedded_config"; then
+            echo "::error::Embedded kernel config lacks CONFIG_HZ_${CONFIG_HZ_VALUE}=y."
+            exit 1
+          fi
+
+          echo "Compiled and embedded kernel config confirmed:"
+          echo "  Default CPU governor: $CPU_DEFAULT_GOVERNOR"
+          echo "  CONFIG_HZ: $CONFIG_HZ_VALUE"
       - name: Validate kernel image and DTB output
         shell: bash
         run: |
