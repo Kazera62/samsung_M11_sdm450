@@ -17,13 +17,7 @@ Buka **Actions → NOCTURNE SDM450 Build → Run workflow**. Pilihan yang tersed
 | TCP congestion | bic, cubic, htcp, westwood, reno |
 | CONFIG_HZ | 100, 250, 300, 1000 |
 
-Defconfig yang digunakan: `a11q_open_defconfig`. Workflow menerapkan pilihan governor dan `CONFIG_HZ` ke konfigurasi kernel, lalu memeriksa hasil konfigurasi build.
-
-**Catatan governor:** pilihan di workflow menentukan governor default kernel. Android atau Power HAL masih dapat menggantinya setelah boot, jadi governor yang sedang aktif di HP bisa berbeda.
-
-SUSFS v2.3.0 hanya digunakan saat memilih **BakaSU + SUSFS**. Jika memilih **Non-root**, integrasi root dan SUSFS dinonaktifkan.
-
-Nama build di `/proc/version` diatur sebagai `Zenith@GitHub` melalui `scripts/mkcompile_h`.
+Defconfig yang digunakan: `a11q_open_defconfig`.
 
 ## Hasil build dan Telegram
 
