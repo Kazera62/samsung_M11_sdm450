@@ -395,7 +395,7 @@ jobs:
                     printf 'CONFIG_HZ_%s=y\n' "$CONFIG_HZ_VALUE" >> "$config"
 
                     # Recalculate derived CONFIG_HZ and normalize Kconfig selections.
-                    make CC="ccache clang" ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} O=out ARCH="${{ env.KERNEL_ARCH }}" olddefconfig
+                    make CC="ccache clang" CLANG_TRIPLE=aarch64-linux-gnu- LD_LIBRARY_PATH="$GITHUB_WORKSPACE/clang-custom/lib64" DTC_EXT="$GITHUB_WORKSPACE/device_kernel/tools/dtc" CONFIG_BUILD_ARM64_DT_OVERLAY=y LOCALVERSION="-$KERNEL_NAME" O=out ARCH=arm64 olddefconfig
 
                     config="$GITHUB_WORKSPACE/device_kernel/out/.config"
                     require_config() {
