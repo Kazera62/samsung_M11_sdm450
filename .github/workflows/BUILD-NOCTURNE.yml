@@ -385,11 +385,12 @@ jobs:
                     fi
 
                     # Optional Kali NetHunter kernel features.
+                    test -x ./scripts/config || {
+                      echo "::error::scripts/config is missing from the kernel source."
+                      exit 1
+                    }
+
                     if [[ "${ENABLE_NETHUNTER:-false}" == "true" ]]; then
-                      test -x ./scripts/config || {
-                        echo "::error::scripts/config is missing from the kernel source."
-                        exit 1
-                      }
                       for symbol in \
                         CFG80211 MAC80211 MAC80211_RC_MINSTREL MAC80211_RC_MINSTREL_HT \
                         CFG80211_INTERNAL_REGDB USB_GADGET USB_CONFIGFS \
@@ -397,7 +398,17 @@ jobs:
                         ATH9K_HTC RTL8187 RTL8192CU RT2X00 RT2800USB; do
                         ./scripts/config --file "$config" --enable "$symbol"
                       done
-                      echo "NetHunter: requested kernel options added; Kconfig dependencies will be resolved by olddefconfig."
+                      echo "NetHunter enabled: injection patch, mac80211, HID configfs, and USB Wi-Fi drivers requested."
+                    else
+                      # Keep Android's required USB gadget/configfs functions intact.
+                      # Disable the optional NetHunter wireless/injection stack and HID function.
+                      for symbol in \
+                        MAC80211 MAC80211_RC_MINSTREL MAC80211_RC_MINSTREL_HT \
+                        USB_CONFIGFS_F_HID USB_F_HID ATH9K_HTC RTL8187 RTL8192CU \
+                        RT2X00 RT2800USB; do
+                        ./scripts/config --file "$config" --disable "$symbol"
+                      done
+                      echo "NetHunter disabled: optional mac80211, injection-related USB HID, and external USB Wi-Fi drivers disabled; Android USB gadget retained."
                     fi
 
                     # Re-apply CPU governor and timer choices to the final output config
@@ -499,6 +510,17 @@ jobs:
                         require_config "$symbol"
                       done
                       echo "NetHunter kernel options validated: mac80211 injection, USB HID/configfs, and selected USB Wi-Fi drivers."
+                    else
+                      for symbol in \
+                        CONFIG_MAC80211 CONFIG_MAC80211_RC_MINSTREL CONFIG_MAC80211_RC_MINSTREL_HT \
+                        CONFIG_USB_CONFIGFS_F_HID CONFIG_USB_F_HID CONFIG_ATH9K_HTC \
+                        CONFIG_RTL8187 CONFIG_RTL8192CU CONFIG_RT2X00 CONFIG_RT2800USB; do
+                        if grep -Fqx "$symbol=y" "$config"; then
+                          echo "::error::NetHunter-disabled build unexpectedly enabled $symbol."
+                          exit 1
+                        fi
+                      done
+                      echo "NetHunter-disabled configuration validated; Android USB gadget support remains enabled."
                     fi
 
                     case "$ZRAM_COMPRESSION" in
