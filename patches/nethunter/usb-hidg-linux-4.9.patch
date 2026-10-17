@@ -1,10 +1,10 @@
-From 8f4d6e1c9b5d9e6f000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: OpenAI <noreply@openai.com>
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Kernel Build <noreply@example.invalid>
 Subject: [PATCH] usb: gadget: hid: log configfs HID bind lifecycle on 4.9
 
-Add explicit messages when f_hid creates or removes /dev/hidgN. This is
-diagnostic only: a HID gadget device node still appears only after a HID
-function is configured and the composite gadget is bound to a UDC.
+Add explicit messages when f_hid creates or removes /dev/hidgN and include
+the bind error code. This is diagnostic only: a HID gadget node still appears
+only after a HID function is configured and the composite gadget is bound to a UDC.
 
 ---
  drivers/usb/gadget/function/f_hid.c | 3 +++
@@ -24,7 +24,15 @@ diff --git a/drivers/usb/gadget/function/f_hid.c b/drivers/usb/gadget/function/f
  
  	return 0;
  del:
-@@ -1002,9 +1003,10 @@ static void hidg_unbind(struct usb_configuration *c, struct usb_function *f)
+@@ -766,6 +767,7 @@ static int hidg_bind(struct usb_configuration *c, struct usb_function *f)
+ fail_free_descs:
+ 	usb_free_all_descriptors(f);
+ fail:
++	pr_err("f_hid: hidg_bind failed (%d)\n", status);
+ 	ERROR(f->config->cdev, "hidg_bind FAILED\n");
+ 	if (hidg->req != NULL)
+ 		free_ep_req(hidg->in_ep, hidg->req);
+@@ -1000,8 +1002,9 @@ static void hidg_unbind(struct usb_configuration *c, struct usb_function *f)
  {
  	struct f_hidg *hidg = func_to_hidg(f);
  
