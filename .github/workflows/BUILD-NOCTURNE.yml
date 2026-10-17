@@ -938,7 +938,7 @@ jobs:
       - name: Upload ZIP artifact
         uses: ./.github/workflows/upload-files
 
-      - name: Send ZIP and build report to Telegram (optional)
+      - name: Send build report to Telegram (optional)
         continue-on-error: true
         shell: bash
         env:
@@ -952,28 +952,6 @@ jobs:
             echo "::notice::Telegram secrets are not configured; the GitHub Actions artifact is available instead."
             exit 0
           fi
-
-          : "${PACK_NAME:?Packaging did not export PACK_NAME}"
-          zip_path="$GITHUB_WORKSPACE/device_kernel/$PACK_NAME"
-          test -s "$zip_path"
-
-          printf -v caption 'NOCTURNE / SDM450\nKernel: %s (%s)\nClang: %s\nRoot: %s\nCommit: %.12s' \
-            "$KERNEL_NAME" "$BUILT_KERNEL_RELEASE" "$CLANG_PROFILE" "$ROOT_NAME" "$KERNEL_SOURCE_COMMIT"
-
-          document_response="$(curl --fail-with-body --silent --show-error --retry 2 --max-time 300 \
-            --request POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
-            --form-string "chat_id=${TELEGRAM_CHAT_ID}" \
-            --form-string "caption=$caption" \
-            --form "document=@${zip_path};type=application/zip")"
-
-          printf '%s' "$document_response" | python3 -c '
-          import json, sys
-          data = json.load(sys.stdin)
-          if not data.get("ok"):
-              print("Telegram document upload failed: " + str(data.get("description", "unknown API error")), file=sys.stderr)
-              sys.exit(1)
-          print("Telegram accepted the kernel ZIP.")
-          '
 
           report=$(cat <<EOF
           Kernel: $KERNEL_NAME
