@@ -655,8 +655,8 @@ jobs:
           # executable; -B/usr/bin/ makes the host GCC resolve it explicitly.
           # CROSS_COMPILE-prefixed GNU binutils remain responsible for target objects.
           host_ld_replacements = (
-              ('make CC="ccache clang"', 'make HOSTLD=/usr/bin/ld HOSTCC="gcc -B/usr/bin/" CC="ccache clang"'),
-              ('make -j$(nproc --all) CC="ccache clang"', 'make -j$(nproc --all) HOSTLD=/usr/bin/ld HOSTCC="gcc -B/usr/bin/" CC="ccache clang"'),
+              ('make CC="ccache clang"', 'make HOSTLD=/usr/bin/ld HOSTCC=/usr/bin/gcc CC="ccache clang"'),
+              ('make -j$(nproc --all) CC="ccache clang"', 'make -j$(nproc --all) HOSTLD=/usr/bin/ld HOSTCC=/usr/bin/gcc CC="ccache clang"'),
           )
           for old, new in host_ld_replacements:
               count = process.count(old)
