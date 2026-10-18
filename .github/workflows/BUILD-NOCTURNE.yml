@@ -650,12 +650,12 @@ jobs:
           else:
               print("No upload-artifact v4 reference found in build-process; no runtime upgrade needed.")
 
-          # Route unprefixed host compiler calls through a wrapper on PATH.
-          # The wrapper clears stale compiler-search variables and forces system ld.
-          # CROSS_COMPILE-prefixed GNU binutils remain responsible for target objects.
+          # Force host builds to call the tested wrapper by absolute path.
+          # PATH can be adjusted by the framework/composite action, so HOSTCC=gcc
+          # alone is not reliable. Target CROSS_COMPILE tools remain unchanged.
           host_ld_replacements = (
-              ('make CC="ccache clang"', 'make HOSTLD=/usr/bin/ld HOSTCC=gcc CC="ccache clang"'),
-              ('make -j$(nproc --all) CC="ccache clang"', 'make -j$(nproc --all) HOSTLD=/usr/bin/ld HOSTCC=gcc CC="ccache clang"'),
+              ('make CC="ccache clang"', 'make HOSTLD=/usr/bin/ld HOSTCC=$GITHUB_WORKSPACE/host-tool-bin/gcc CC="ccache clang"'),
+              ('make -j$(nproc --all) CC="ccache clang"', 'make -j$(nproc --all) HOSTLD=/usr/bin/ld HOSTCC=$GITHUB_WORKSPACE/host-tool-bin/gcc CC="ccache clang"'),
           )
           for old, new in host_ld_replacements:
               count = process.count(old)
@@ -676,7 +676,7 @@ jobs:
           if process.count(old_clang_path) != 1:
               raise SystemExit("Expected exactly one Clang PATH setup to fix host linker lookup.")
           process = process.replace(old_clang_path, new_clang_path)
-          print("Host tools use system ld; selected Clang and target cross-binutils remain available.")
+          print("Host builds use the absolute GCC wrapper path; selected Clang and target cross-binutils remain available.")
 
           process_path.write_text(process)
           print("Framework actions adjusted: rootless setup is skipped, SUSFS compatibility is inline, and selected kernel defaults are validated.")
