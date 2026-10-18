@@ -644,6 +644,21 @@ jobs:
           else:
               print("No upload-artifact v4 reference found in build-process; no runtime upgrade needed.")
 
+          # The toolchain's bundled GNU ld may be too old for Ubuntu 24.04 host glibc
+          # (SHT_RELR/.relr.dyn). Use the runner linker for host binaries only;
+          # CROSS_COMPILE-prefixed GNU binutils remain responsible for target objects.
+          host_ld_replacements = (
+              ('make CC="ccache clang"', 'make HOSTLD=/usr/bin/ld CC="ccache clang"'),
+              ('make -j$(nproc --all) CC="ccache clang"', 'make -j$(nproc --all) HOSTLD=/usr/bin/ld CC="ccache clang"'),
+          )
+          for old, new in host_ld_replacements:
+              count = process.count(old)
+              expected = 4 if old == 'make CC="ccache clang"' else 2
+              if count != expected:
+                  raise SystemExit(f"Expected {expected} Clang make command(s) for host-linker fix, found {count}: {old}")
+              process = process.replace(old, new)
+          print("Pinned host-tool linking to /usr/bin/ld; target cross-linker selection is unchanged.")
+
           process_path.write_text(process)
           print("Framework actions adjusted: rootless setup is skipped, SUSFS compatibility is inline, and selected kernel defaults are validated.")
           PY
