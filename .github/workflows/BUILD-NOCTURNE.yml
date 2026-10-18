@@ -451,7 +451,6 @@ jobs:
           env_path.write_text(env_text)
           process_path = Path(".github/workflows/build-process/action.yml")
           process = process_path.read_text()
-          config_validation_marker = "          # KPM Detect\\n"
           config_validation_hook = r'''          # Validate the final Kconfig output before any kernel compilation.
                     config="$GITHUB_WORKSPACE/device_kernel/out/.config"
                     if [[ ! -s "$config" ]]; then
@@ -639,7 +638,12 @@ jobs:
                     echo "Kernel default selections validated against out/.config and zram_drv.c."
                     # KPM Detect
           '''
-          process = replace_once(process, config_validation_marker, config_validation_hook, "post-defconfig option-validation hook")
+          # Upstream has changed the marker's whitespace/line-ending representation before.
+          # Match the standalone marker line instead of a brittle escaped-newline string.
+          config_validation_match = re.search(r"(?m)^[ \\t]*# KPM Detect[ \\t]*$", process)
+          if config_validation_match is None:
+              raise SystemExit("Could not locate the standalone KPM Detect marker for the post-defconfig validation hook.")
+          process = process[:config_validation_match.start()] + config_validation_hook + process[config_validation_match.end():]
 
           # The upstream error-artifact step still uses upload-artifact v4 (Node 20).
           # Upgrade that reference to the Node 24-compatible v7 to avoid runner warnings.
