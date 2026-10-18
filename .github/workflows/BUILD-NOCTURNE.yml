@@ -414,7 +414,7 @@ jobs:
           )
           new_clang_selector = (
               'if [[ "' + clang_expr + ' env.CLANG_SOURCE }}" == *proton* ]] || '
-              '[[ "' + clang_expr + ' env.CLANG_SOURCE }}" == *tw3akslow/neutron-toolchain* ]] || '
+              '[[ "' + clang_expr + ' env.CLANG_SOURCE }}" == *tw3akslow/neutron-toolchain* ]]; then\n'
               '            echo "[+] Detected standalone kernel Clang toolchain; using bundled GNU binutils."\n'
               '            echo "GCC_64=CROSS_COMPILE=aarch64-linux-gnu-" >> $GITHUB_ENV\n'
               '            echo "GCC_32=CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/gcc-32/bin/arm-linux-androideabi-" >> $GITHUB_ENV'
