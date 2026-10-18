@@ -32,6 +32,11 @@ on:
         required: true
         type: boolean
         default: false
+      enable_performance_tuning:
+        description: "Disable optional scheduler statistics and CPU frequency switch profiling to reduce instrumentation overhead"
+        required: true
+        type: boolean
+        default: false
       cpu_default_governor:
         description: "Default CPU governor (options enabled in the current defconfig)"
         required: true
@@ -94,6 +99,7 @@ env:
   KERNEL_BRANCH: "${{ github.ref_name }}"
   ROOT_NAME: "${{ inputs.root }}"
   ENABLE_NETHUNTER: "${{ inputs.enable_nethunter && 'true' || 'false' }}"
+  ENABLE_PERFORMANCE_TUNING: "${{ inputs.enable_performance_tuning && 'true' || 'false' }}"
   CPU_DEFAULT_GOVERNOR: "${{ inputs.cpu_default_governor }}"
   IO_DEFAULT_SCHEDULER: "${{ inputs.io_default_scheduler }}"
   ZRAM_COMPRESSION: "${{ inputs.compression_algorithm }}"
@@ -896,6 +902,34 @@ jobs:
               [f"CONFIG_HZ_{hz_value}=y"],
           )
           lines = replace_choice(lines, r"^CONFIG_HZ=.*$", [])
+
+          # Conservative opt-in tuning: remove only optional scheduling statistics
+          # and CPU-frequency transition profiling. Do not change functional drivers.
+          performance_tuning = os.environ.get("ENABLE_PERFORMANCE_TUNING", "false").lower()
+          if performance_tuning not in {"true", "false"}:
+              fail("Invalid performance tuning toggle; expected true or false.")
+
+          if performance_tuning == "true":
+              performance_symbols = (
+                  "CONFIG_SCHEDSTATS",
+                  "CONFIG_SCHED_INFO",
+                  "CONFIG_CPU_FREQ_SWITCH_PROFILER",
+              )
+              for symbol in performance_symbols:
+                  if not declared(config_text, symbol):
+                      fail(f"Performance tuning expects {symbol} to exist in this defconfig.")
+                  symbol_pattern = re.compile(
+                      rf"^(?:# )?{re.escape(symbol)}(?:=y| is not set)$"
+                  )
+                  matches = [line for line in lines if symbol_pattern.fullmatch(line)]
+                  if len(matches) != 1:
+                      fail(f"Expected exactly one defconfig setting for {symbol}, found {len(matches)}.")
+                  lines = [line for line in lines if not symbol_pattern.fullmatch(line)]
+                  lines.append(f"# {symbol} is not set")
+              print("Performance tuning enabled: optional scheduler statistics and CPU-frequency profiling disabled.")
+          else:
+              print("Performance tuning disabled: original scheduler/profiler settings retained.")
+
           config_path.write_text("\n".join(lines) + "\n")
 
           # Only the zRAM default is changed. The kernel boot image stays gzip
@@ -994,6 +1028,17 @@ jobs:
           if ! grep -Fqx "CONFIG_HZ_${CONFIG_HZ_VALUE}=y" "$embedded_config"; then
             echo "::error::Embedded kernel config lacks CONFIG_HZ_${CONFIG_HZ_VALUE}=y."
             exit 1
+          fi
+
+          if [[ "$ENABLE_PERFORMANCE_TUNING" == "true" ]]; then
+            for symbol in SCHEDSTATS SCHED_INFO CPU_FREQ_SWITCH_PROFILER; do
+              grep -Fqx "# CONFIG_${symbol} is not set" "$embedded_config" || {
+                echo "::error::Performance tuning expected CONFIG_${symbol} to be disabled in the embedded kernel config."
+                grep -E "^CONFIG_${symbol}=y$|^# CONFIG_${symbol} is not set$" "$embedded_config" || true
+                exit 1
+              }
+            done
+            echo "Performance tuning verified in embedded kernel config: optional scheduler/profiler instrumentation disabled."
           fi
 
           echo "Compiled and embedded kernel config confirmed:"
