@@ -650,13 +650,12 @@ jobs:
           else:
               print("No upload-artifact v4 reference found in build-process; no runtime upgrade needed.")
 
-          # Force host utility builds to use Ubuntu's linker directly.
-          # HOSTLD alone does not control GCC collect2's lookup of the plain "ld"
-          # executable; -B/usr/bin/ makes the host GCC resolve it explicitly.
+          # Route unprefixed host compiler calls through a wrapper on PATH.
+          # The wrapper clears stale compiler-search variables and forces system ld.
           # CROSS_COMPILE-prefixed GNU binutils remain responsible for target objects.
           host_ld_replacements = (
-              ('make CC="ccache clang"', 'make HOSTLD=/usr/bin/ld HOSTCC="/usr/bin/gcc -B$GITHUB_WORKSPACE/host-tool-bin/" CC="ccache clang"'),
-              ('make -j$(nproc --all) CC="ccache clang"', 'make -j$(nproc --all) HOSTLD=/usr/bin/ld HOSTCC="/usr/bin/gcc -B$GITHUB_WORKSPACE/host-tool-bin/" CC="ccache clang"'),
+              ('make CC="ccache clang"', 'make HOSTLD=/usr/bin/ld HOSTCC=gcc CC="ccache clang"'),
+              ('make -j$(nproc --all) CC="ccache clang"', 'make -j$(nproc --all) HOSTLD=/usr/bin/ld HOSTCC=gcc CC="ccache clang"'),
           )
           for old, new in host_ld_replacements:
               count = process.count(old)
@@ -1027,11 +1026,19 @@ jobs:
           test -x /usr/bin/ld
           mkdir -p "$GITHUB_WORKSPACE/host-tool-bin"
           ln -sfn /usr/bin/ld "$GITHUB_WORKSPACE/host-tool-bin/ld"
+          cat > "$GITHUB_WORKSPACE/host-tool-bin/gcc" <<'HOST_GCC_WRAPPER'
+          #!/usr/bin/env bash
+          set -e
+          unset GCC_EXEC_PREFIX COMPILER_PATH
+          exec /usr/bin/gcc -B"$GITHUB_WORKSPACE/host-tool-bin/" "$@"
+          HOST_GCC_WRAPPER
+          chmod +x "$GITHUB_WORKSPACE/host-tool-bin/gcc"
           test -x "$GITHUB_WORKSPACE/host-tool-bin/ld"
-          printf '%s\n' 'int main(void) { return 0; }' | /usr/bin/gcc -B"$GITHUB_WORKSPACE/host-tool-bin/" -x c -o /tmp/nocturne-host-link-test -
+          test -x "$GITHUB_WORKSPACE/host-tool-bin/gcc"
+          printf '%s\n' 'int main(void) { return 0; }' | PATH="$GITHUB_WORKSPACE/host-tool-bin:$PATH" gcc -x c -o /tmp/nocturne-host-link-test -
           /tmp/nocturne-host-link-test
           echo "$GITHUB_WORKSPACE/host-tool-bin" >> "$GITHUB_PATH"
-          echo "Verified host GCC and linker: $(/usr/bin/ld --version | sed -n '1p')"
+          echo "Verified host GCC wrapper and linker: $(/usr/bin/ld --version | sed -n '1p')"
 
       - name: Compile kernel
         uses: ./.github/workflows/build-process
