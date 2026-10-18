@@ -1030,12 +1030,16 @@ jobs:
           #!/usr/bin/env bash
           set -e
           unset GCC_EXEC_PREFIX COMPILER_PATH
-          exec /usr/bin/gcc -B"$GITHUB_WORKSPACE/host-tool-bin/" "$@"
+          # Pin GCC's linker lookup to Ubuntu's system binutils, not the Clang package or workspace PATH.
+          exec /usr/bin/gcc -B/usr/bin/ "$@"
           HOST_GCC_WRAPPER
           chmod +x "$GITHUB_WORKSPACE/host-tool-bin/gcc"
           test -x "$GITHUB_WORKSPACE/host-tool-bin/ld"
           test -x "$GITHUB_WORKSPACE/host-tool-bin/gcc"
-          printf '%s\n' 'int main(void) { return 0; }' | PATH="$GITHUB_WORKSPACE/host-tool-bin:$PATH" gcc -x c -o /tmp/nocturne-host-link-test -
+          resolved_host_ld="$("$GITHUB_WORKSPACE/host-tool-bin/gcc" -print-prog-name=ld)"
+          test -x "$resolved_host_ld"
+          printf 'GCC host linker resolved to: %s\n' "$resolved_host_ld"
+          printf '%s\n' 'int main(void) { return 0; }' | "$GITHUB_WORKSPACE/host-tool-bin/gcc" -x c -o /tmp/nocturne-host-link-test -
           /tmp/nocturne-host-link-test
           echo "$GITHUB_WORKSPACE/host-tool-bin" >> "$GITHUB_PATH"
           echo "Verified host GCC wrapper and linker: $(/usr/bin/ld --version | sed -n '1p')"
