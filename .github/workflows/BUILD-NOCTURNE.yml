@@ -665,34 +665,34 @@ jobs:
 
           # Host utilities need the system linker, but ARM32 vDSO linking must use
           # the ARM cross-linker. A plain /usr/bin/ld shim breaks -m armelf_linux_eabi.
-          old_clang_path = '            export PATH=$GITHUB_WORKSPACE/clang-custom/bin:$PATH\\n'
-          new_clang_path = (
-              '            mkdir -p "$GITHUB_WORKSPACE/host-tool-bin"\\n'
-              '            cat > "$GITHUB_WORKSPACE/host-tool-bin/ld" <<\\'LD_WRAPPER\\'\\n'
-              '            #!/usr/bin/env bash\\n'
-              '            set -euo pipefail\\n'
-              '            args=("$@")\\n'
-              '            for ((i=0; i<${#args[@]}; i++)); do\\n'
-              '              if [[ "${args[i]}" == "-m" && $((i+1)) -lt ${#args[@]} && "${args[i+1]}" == "armelf_linux_eabi" ]] || [[ "${args[i]}" == "-marmelf_linux_eabi" ]]; then\\n'
-              '                prefix="${CROSS_COMPILE_ARM32:-}"\\n'
-              '                for candidate in "${prefix}ld" "${prefix}ld.bfd"; do\\n'
-              '                  [[ -n "$prefix" ]] || continue\\n'
-              '                  resolved="$(command -v "$candidate" 2>/dev/null || true)"\\n'
-              '                  if [[ -n "$resolved" && -x "$resolved" && "$resolved" != "$0" ]]; then\\n'
-              '                    exec "$resolved" "$@"\\n'
-              '                  fi\\n'
-              '                done\\n'
-              '                arm32_ld="$GITHUB_WORKSPACE/gcc-32/bin/arm-linux-androideabi-ld.bfd"\\n'
-              '                if [[ -x "$arm32_ld" ]]; then exec "$arm32_ld" "$@"; fi\\n'
-              '                echo "::error::ARM32 vDSO linking requested, but no ARM cross-linker was found." >&2\\n'
-              '                exit 127\\n'
-              '              fi\\n'
-              '            done\\n'
-              '            exec /usr/bin/ld "$@"\\n'
-              '            LD_WRAPPER\\n'
-              '            chmod +x "$GITHUB_WORKSPACE/host-tool-bin/ld"\\n'
-              '            export PATH="$GITHUB_WORKSPACE/host-tool-bin:$GITHUB_WORKSPACE/clang-custom/bin:$PATH"\\n'
-          )
+          old_clang_path = "            export PATH=$GITHUB_WORKSPACE/clang-custom/bin:$PATH\n"
+          new_clang_path = "\n".join([
+              "            mkdir -p \"$GITHUB_WORKSPACE/host-tool-bin\"",
+              "            cat > \"$GITHUB_WORKSPACE/host-tool-bin/ld\" <<'LD_WRAPPER'",
+              "          #!/usr/bin/env bash",
+              "          set -euo pipefail",
+              "          args=(\"$@\")",
+              "          for ((i=0; i<${#args[@]}; i++)); do",
+              "            if [[ \"${args[i]}\" == \"-m\" && $((i+1)) -lt ${#args[@]} && \"${args[i+1]}\" == \"armelf_linux_eabi\" ]] || [[ \"${args[i]}\" == \"-marmelf_linux_eabi\" ]]; then",
+              "              prefix=\"${CROSS_COMPILE_ARM32:-}\"",
+              "              for candidate in \"${prefix}ld\" \"${prefix}ld.bfd\"; do",
+              "                [[ -n \"$prefix\" ]] || continue",
+              "                resolved=\"$(command -v \"$candidate\" 2>/dev/null || true)\"",
+              "                if [[ -n \"$resolved\" && -x \"$resolved\" && \"$resolved\" != \"$0\" ]]; then",
+              "                  exec \"$resolved\" \"$@\"",
+              "                fi",
+              "              done",
+              "              arm32_ld=\"$GITHUB_WORKSPACE/gcc-32/bin/arm-linux-androideabi-ld.bfd\"",
+              "              if [[ -x \"$arm32_ld\" ]]; then exec \"$arm32_ld\" \"$@\"; fi",
+              "              echo \"::error::ARM32 vDSO linking requested, but no ARM cross-linker was found.\" >&2",
+              "              exit 127",
+              "            fi",
+              "          done",
+              "          exec /usr/bin/ld \"$@\"",
+              "          LD_WRAPPER",
+              "            chmod +x \"$GITHUB_WORKSPACE/host-tool-bin/ld\"",
+              "            export PATH=\"$GITHUB_WORKSPACE/host-tool-bin:$GITHUB_WORKSPACE/clang-custom/bin:$PATH\"",
+          ]) + "\n"
           if process.count(old_clang_path) != 1:
               raise SystemExit("Expected exactly one Clang PATH setup to fix host linker lookup.")
           process = process.replace(old_clang_path, new_clang_path)
