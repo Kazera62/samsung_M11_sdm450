@@ -465,6 +465,12 @@ jobs:
                       exit 1
                     }
 
+                    # Keep the compiled configuration embedded in every kernel image so
+                    # post-build validation works even when NetHunter is disabled.
+                    for symbol in IKCONFIG IKCONFIG_PROC; do
+                      ./scripts/config --file "$config" --enable "$symbol"
+                    done
+
                     if [[ "${ENABLE_NETHUNTER:-false}" == "true" ]]; then
                       for symbol in \
                         CFG80211 MAC80211 MAC80211_RC_MINSTREL MAC80211_RC_MINSTREL_HT \
@@ -482,7 +488,7 @@ jobs:
                       # Disable the optional NetHunter wireless/injection stack and HID function.
                       for symbol in \
                         MAC80211 MAC80211_RC_MINSTREL MAC80211_RC_MINSTREL_HT \
-                        USB_CONFIGFS_F_HID USB_F_HID IKCONFIG_PROC IKCONFIG \
+                        USB_CONFIGFS_F_HID USB_F_HID \
                         WLAN_VENDOR_ATH ATH9K_HTC \
                         WLAN_VENDOR_REALTEK RTL_CARDS RTL8187 RTL8192CU \
                         WLAN_VENDOR_RALINK RT2X00 RT2800USB; do
@@ -601,7 +607,7 @@ jobs:
                     else
                       for symbol in \
                         CONFIG_MAC80211 CONFIG_MAC80211_RC_MINSTREL CONFIG_MAC80211_RC_MINSTREL_HT \
-                        CONFIG_USB_CONFIGFS_F_HID CONFIG_USB_F_HID CONFIG_IKCONFIG CONFIG_IKCONFIG_PROC \
+                        CONFIG_USB_CONFIGFS_F_HID CONFIG_USB_F_HID \
                         CONFIG_WLAN_VENDOR_ATH CONFIG_ATH9K_HTC \
                         CONFIG_WLAN_VENDOR_REALTEK CONFIG_RTL_CARDS CONFIG_RTL8187 CONFIG_RTL8192CU \
                         CONFIG_WLAN_VENDOR_RALINK CONFIG_RT2X00 CONFIG_RT2800USB; do
