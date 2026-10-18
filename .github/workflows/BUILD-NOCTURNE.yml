@@ -657,7 +657,20 @@ jobs:
               if count != expected:
                   raise SystemExit(f"Expected {expected} Clang make command(s) for host-linker fix, found {count}: {old}")
               process = process.replace(old, new)
-          print("Pinned host-tool linking to /usr/bin/ld; target cross-linker selection is unchanged.")
+
+          # GCC host tools still resolve plain "ld" via PATH; HOSTLD alone does not
+          # override GCC's internal linker lookup. Put a system-ld shim before the
+          # Clang bin directory while keeping the selected Clang first for compiler calls.
+          old_clang_path = '            export PATH=$GITHUB_WORKSPACE/clang-custom/bin:$PATH\n'
+          new_clang_path = (
+              '            mkdir -p "$GITHUB_WORKSPACE/host-tool-bin"\n'
+              '            ln -sf /usr/bin/ld "$GITHUB_WORKSPACE/host-tool-bin/ld"\n'
+              '            export PATH="$GITHUB_WORKSPACE/host-tool-bin:$GITHUB_WORKSPACE/clang-custom/bin:$PATH"\n'
+          )
+          if process.count(old_clang_path) != 1:
+              raise SystemExit("Expected exactly one Clang PATH setup to fix host linker lookup.")
+          process = process.replace(old_clang_path, new_clang_path)
+          print("Host tools use system ld; selected Clang and target cross-binutils remain available.")
 
           process_path.write_text(process)
           print("Framework actions adjusted: rootless setup is skipped, SUSFS compatibility is inline, and selected kernel defaults are validated.")
