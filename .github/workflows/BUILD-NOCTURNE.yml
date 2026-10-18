@@ -655,8 +655,8 @@ jobs:
           # executable; -B/usr/bin/ makes the host GCC resolve it explicitly.
           # CROSS_COMPILE-prefixed GNU binutils remain responsible for target objects.
           host_ld_replacements = (
-              ('make CC="ccache clang"', 'make HOSTLD=/usr/bin/ld HOSTCC=/usr/bin/gcc CC="ccache clang"'),
-              ('make -j$(nproc --all) CC="ccache clang"', 'make -j$(nproc --all) HOSTLD=/usr/bin/ld HOSTCC=/usr/bin/gcc CC="ccache clang"'),
+              ('make CC="ccache clang"', 'make HOSTLD=/usr/bin/ld HOSTCC="/usr/bin/gcc -B$GITHUB_WORKSPACE/host-tool-bin/" CC="ccache clang"'),
+              ('make -j$(nproc --all) CC="ccache clang"', 'make -j$(nproc --all) HOSTLD=/usr/bin/ld HOSTCC="/usr/bin/gcc -B$GITHUB_WORKSPACE/host-tool-bin/" CC="ccache clang"'),
           )
           for old, new in host_ld_replacements:
               count = process.count(old)
@@ -1011,6 +1011,27 @@ jobs:
           print(f"  TCP congestion: {tcp_value}")
           print(f"  CONFIG_HZ: {hz_value}")
           PY
+
+      - name: Ensure system host linker
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -x /usr/bin/ld && ! -x /usr/bin/ld.bfd ]]; then
+            sudo apt-get update
+            sudo apt-get install -y binutils
+          fi
+          if [[ ! -x /usr/bin/ld && -x /usr/bin/ld.bfd ]]; then
+            sudo ln -sfn /usr/bin/ld.bfd /usr/bin/ld
+          fi
+          test -x /usr/bin/gcc
+          test -x /usr/bin/ld
+          mkdir -p "$GITHUB_WORKSPACE/host-tool-bin"
+          ln -sfn /usr/bin/ld "$GITHUB_WORKSPACE/host-tool-bin/ld"
+          test -x "$GITHUB_WORKSPACE/host-tool-bin/ld"
+          printf 'int main(void) { return 0; }\\n' | /usr/bin/gcc -B"$GITHUB_WORKSPACE/host-tool-bin/" -x c -o /tmp/nocturne-host-link-test -
+          /tmp/nocturne-host-link-test
+          echo "$GITHUB_WORKSPACE/host-tool-bin" >> "$GITHUB_PATH"
+          echo "Verified host GCC and linker: $(/usr/bin/ld --version | sed -n '1p')"
 
       - name: Compile kernel
         uses: ./.github/workflows/build-process
