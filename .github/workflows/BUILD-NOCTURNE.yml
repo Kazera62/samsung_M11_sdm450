@@ -18,7 +18,8 @@ on:
           - Clang r416183b
           - Proton Clang
           - ZyC Clang 12.0.1
-          - ZyC Clang 16.0.6 (Experimental)
+          - Neutron Clang 14.0.0
+          - Gonon Clang 15.0.7
       root:
         description: "Root implementation"
         required: true
@@ -112,8 +113,8 @@ env:
 
   KERNEL_SOURCE: "https://github.com/Kazera62/samsung_M11_sdm450.git"
 
-  CLANG_SOURCE: "${{ inputs.clang_profile == 'Proton Clang' && 'https://github.com/kdrag0n/proton-clang.git' || inputs.clang_profile == 'ZyC Clang 12.0.1' && 'https://github.com/ZyCromerZ/Clang/releases/download/12.0.1-20230207-release/Clang-12.0.1-20230207.tar.gz' || inputs.clang_profile == 'ZyC Clang 16.0.6 (Experimental)' && 'https://github.com/ZyCromerZ/Clang/releases/download/16.0.6-20260807-release/Clang-16.0.6-20260807.tar.gz' || 'https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b.git' }}"
-  CLANG_BRANCH: "${{ inputs.clang_profile == 'Proton Clang' && 'master' || 'lineage-20.0' }}"
+  CLANG_SOURCE: "${{ inputs.clang_profile == 'Proton Clang' && 'https://github.com/kdrag0n/proton-clang.git' || inputs.clang_profile == 'ZyC Clang 12.0.1' && 'https://github.com/ZyCromerZ/Clang/releases/download/12.0.1-20230207-release/Clang-12.0.1-20230207.tar.gz' || inputs.clang_profile == 'Neutron Clang 14.0.0' && 'https://github.com/tw3akslow/neutron-toolchain.git' || inputs.clang_profile == 'Gonon Clang 15.0.7' && 'https://github.com/Gonon-Kernel/gonon-clang/releases/download/15.0.7-20231104-release/GononClang-15.0.7-20231104.tar.xz' || 'https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b.git' }}"
+  CLANG_BRANCH: "${{ inputs.clang_profile == 'Proton Clang' && 'master' || inputs.clang_profile == 'Neutron Clang 14.0.0' && 'Neutron-14' || 'lineage-20.0' }}"
 
   GCC_GNU: "false"
   GCC_64_SOURCE: "https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git"
@@ -405,6 +406,27 @@ jobs:
           # of Coccinelle, which is not used by this build path.
           env_path = Path(".github/workflows/build-env/action.yml")
           env_text = env_path.read_text()
+          clang_expr = "$" + "{{"
+          old_clang_selector = (
+              'if [[ "' + clang_expr + ' env.CLANG_SOURCE }}" == *proton* ]]; then\n'
+              '            echo "[+] Detected Proton Clang. Automatically Configure GCC."\n'
+              '            echo "GCC_64=CROSS_COMPILE=aarch64-linux-gnu-" >> $GITHUB_ENV\n'
+              '            echo "GCC_32=CROSS_COMPILE_ARM32=arm-linux-gnueabi-" >> $GITHUB_ENV'
+          )
+          new_clang_selector = (
+              'if [[ "' + clang_expr + ' env.CLANG_SOURCE }}" == *proton* ]] || '
+              '[[ "' + clang_expr + ' env.CLANG_SOURCE }}" == *tw3akslow/neutron-toolchain* ]] || '
+              '[[ "' + clang_expr + ' env.CLANG_SOURCE }}" == *GononClang-15.0.7* ]]; then\n'
+              '            echo "[+] Detected standalone kernel Clang toolchain; using bundled GNU binutils."\n'
+              '            echo "GCC_64=CROSS_COMPILE=aarch64-linux-gnu-" >> $GITHUB_ENV\n'
+              '            echo "GCC_32=CROSS_COMPILE_ARM32=arm-linux-gnueabi-" >> $GITHUB_ENV'
+          )
+          env_text = replace_once(
+              env_text,
+              old_clang_selector,
+              new_clang_selector,
+              "standalone kernel Clang selector",
+          )
           env_text = replace_once(
               env_text,
               "large-packages: true",
