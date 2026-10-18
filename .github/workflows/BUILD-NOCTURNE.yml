@@ -457,7 +457,7 @@ jobs:
               'cd $GITHUB_WORKSPACE/device_kernel/\n\n'
               '# Use Ubuntu host tools independently of selected target toolchains.\n'
               'unset GCC_EXEC_PREFIX COMPILER_PATH\n'
-              'export PATH="/usr/bin:/bin:$GITHUB_WORKSPACE/host-tool-bin:$GITHUB_WORKSPACE/clang-custom/bin:$PATH"\n\n'
+              'export PATH="$GITHUB_WORKSPACE/host-tool-bin:$GITHUB_WORKSPACE/clang-custom/bin:/usr/bin:/bin:$PATH"\n\n'
               '# Function\nBUILD_PROCESS(){'
           )
           process = replace_once(process, host_env_marker, host_env_hook, "host tool environment setup")
@@ -680,14 +680,14 @@ jobs:
           old_clang_path = '            export PATH=$GITHUB_WORKSPACE/clang-custom/bin:$PATH\n'
           new_clang_path = (
               '            unset GCC_EXEC_PREFIX COMPILER_PATH\n'
-              '            export PATH="/usr/bin:/bin:$GITHUB_WORKSPACE/host-tool-bin:$GITHUB_WORKSPACE/clang-custom/bin:$PATH"\n'
+              '            export PATH="$GITHUB_WORKSPACE/host-tool-bin:$GITHUB_WORKSPACE/clang-custom/bin:/usr/bin:/bin:$PATH"\n'
               '            mkdir -p "$GITHUB_WORKSPACE/host-tool-bin"\n'
               '            ln -sf /usr/bin/ld "$GITHUB_WORKSPACE/host-tool-bin/ld"\n'
           )
           if process.count(old_clang_path) != 1:
               raise SystemExit("Expected exactly one Clang PATH setup to fix host linker lookup.")
           process = process.replace(old_clang_path, new_clang_path)
-          print("Host builds use the absolute GCC wrapper path; selected Clang and target cross-binutils remain available.")
+          print("Host builds use system GCC and binutils; the selected Clang remains ahead of system tool names.")
 
           process_path.write_text(process)
           print("Framework actions adjusted: rootless setup is skipped, SUSFS compatibility is inline, and selected kernel defaults are validated.")
