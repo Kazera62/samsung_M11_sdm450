@@ -19,7 +19,6 @@ on:
           - Proton Clang
           - ZyC Clang 12.0.1
           - Neutron Clang 14.0.0
-          - Gonon Clang 15.0.7
       root:
         description: "Root implementation"
         required: true
@@ -113,7 +112,7 @@ env:
 
   KERNEL_SOURCE: "https://github.com/Kazera62/samsung_M11_sdm450.git"
 
-  CLANG_SOURCE: "${{ inputs.clang_profile == 'Proton Clang' && 'https://github.com/kdrag0n/proton-clang.git' || inputs.clang_profile == 'ZyC Clang 12.0.1' && 'https://github.com/ZyCromerZ/Clang/releases/download/12.0.1-20230207-release/Clang-12.0.1-20230207.tar.gz' || inputs.clang_profile == 'Neutron Clang 14.0.0' && 'https://github.com/tw3akslow/neutron-toolchain.git' || inputs.clang_profile == 'Gonon Clang 15.0.7' && 'https://github.com/Gonon-Kernel/gonon-clang/releases/download/15.0.7-20231104-release/GononClang-15.0.7-20231104.tar.xz' || 'https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b.git' }}"
+  CLANG_SOURCE: "${{ inputs.clang_profile == 'Proton Clang' && 'https://github.com/kdrag0n/proton-clang.git' || inputs.clang_profile == 'ZyC Clang 12.0.1' && 'https://github.com/ZyCromerZ/Clang/releases/download/12.0.1-20230207-release/Clang-12.0.1-20230207.tar.gz' || inputs.clang_profile == 'Neutron Clang 14.0.0' && 'https://github.com/tw3akslow/neutron-toolchain.git' || 'https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b.git' }}"
   CLANG_BRANCH: "${{ inputs.clang_profile == 'Proton Clang' && 'master' || inputs.clang_profile == 'Neutron Clang 14.0.0' && 'Neutron-14' || 'lineage-20.0' }}"
 
   GCC_GNU: "false"
@@ -416,7 +415,6 @@ jobs:
           new_clang_selector = (
               'if [[ "' + clang_expr + ' env.CLANG_SOURCE }}" == *proton* ]] || '
               '[[ "' + clang_expr + ' env.CLANG_SOURCE }}" == *tw3akslow/neutron-toolchain* ]] || '
-              '[[ "' + clang_expr + ' env.CLANG_SOURCE }}" == *GononClang-15.0.7* ]]; then\n'
               '            echo "[+] Detected standalone kernel Clang toolchain; using bundled GNU binutils."\n'
               '            echo "GCC_64=CROSS_COMPILE=aarch64-linux-gnu-" >> $GITHUB_ENV\n'
               '            echo "GCC_32=CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/gcc-32/bin/arm-linux-androideabi-" >> $GITHUB_ENV'
@@ -451,6 +449,7 @@ jobs:
           env_path.write_text(env_text)
           process_path = Path(".github/workflows/build-process/action.yml")
           process = process_path.read_text()
+          config_validation_marker = "          # KPM Detect\n"
           config_validation_hook = r'''          # Validate the final Kconfig output before any kernel compilation.
                     config="$GITHUB_WORKSPACE/device_kernel/out/.config"
                     if [[ ! -s "$config" ]]; then
@@ -638,12 +637,7 @@ jobs:
                     echo "Kernel default selections validated against out/.config and zram_drv.c."
                     # KPM Detect
           '''
-          # Upstream has changed the marker's whitespace/line-ending representation before.
-          # Match the standalone marker line instead of a brittle escaped-newline string.
-          config_validation_match = re.search(r"(?m)^[ \\t]*# KPM Detect[ \\t]*$", process)
-          if config_validation_match is None:
-              raise SystemExit("Could not locate the standalone KPM Detect marker for the post-defconfig validation hook.")
-          process = process[:config_validation_match.start()] + config_validation_hook + process[config_validation_match.end():]
+          process = replace_once(process, config_validation_marker, config_validation_hook, "post-defconfig option-validation hook")
 
           # The upstream error-artifact step still uses upload-artifact v4 (Node 20).
           # Upgrade that reference to the Node 24-compatible v7 to avoid runner warnings.
@@ -654,11 +648,12 @@ jobs:
           else:
               print("No upload-artifact v4 reference found in build-process; no runtime upgrade needed.")
 
-          # Use the system host GCC directly with an explicit system-binutils prefix.
-          # The selected Clang and target CROSS_COMPILE tools remain unchanged.
+          # The toolchain's bundled GNU ld may be too old for Ubuntu 24.04 host glibc
+          # (SHT_RELR/.relr.dyn). Use the runner linker for host binaries only;
+          # CROSS_COMPILE-prefixed GNU binutils remain responsible for target objects.
           host_ld_replacements = (
-              ('make CC="ccache clang"', 'make HOSTLD=/usr/bin/ld HOSTCC="/usr/bin/gcc -B/usr/bin/" CC="ccache clang"'),
-              ('make -j$(nproc --all) CC="ccache clang"', 'make -j$(nproc --all) HOSTLD=/usr/bin/ld HOSTCC="/usr/bin/gcc -B/usr/bin/" CC="ccache clang"'),
+              ('make CC="ccache clang"', 'make HOSTLD=/usr/bin/ld CC="ccache clang"'),
+              ('make -j$(nproc --all) CC="ccache clang"', 'make -j$(nproc --all) HOSTLD=/usr/bin/ld CC="ccache clang"'),
           )
           for old, new in host_ld_replacements:
               count = process.count(old)
@@ -672,15 +667,14 @@ jobs:
           # Clang bin directory while keeping the selected Clang first for compiler calls.
           old_clang_path = '            export PATH=$GITHUB_WORKSPACE/clang-custom/bin:$PATH\n'
           new_clang_path = (
-              '            unset GCC_EXEC_PREFIX COMPILER_PATH\n'
-              '            export PATH="$GITHUB_WORKSPACE/host-tool-bin:$GITHUB_WORKSPACE/clang-custom/bin:/usr/bin:/bin:$PATH"\n'
               '            mkdir -p "$GITHUB_WORKSPACE/host-tool-bin"\n'
               '            ln -sf /usr/bin/ld "$GITHUB_WORKSPACE/host-tool-bin/ld"\n'
+              '            export PATH="$GITHUB_WORKSPACE/host-tool-bin:$GITHUB_WORKSPACE/clang-custom/bin:$PATH"\n'
           )
           if process.count(old_clang_path) != 1:
               raise SystemExit("Expected exactly one Clang PATH setup to fix host linker lookup.")
           process = process.replace(old_clang_path, new_clang_path)
-          print("Host builds use system GCC and binutils; the selected Clang remains ahead of system tool names.")
+          print("Host tools use system ld; selected Clang and target cross-binutils remain available.")
 
           process_path.write_text(process)
           print("Framework actions adjusted: rootless setup is skipped, SUSFS compatibility is inline, and selected kernel defaults are validated.")
@@ -1014,39 +1008,6 @@ jobs:
           print(f"  TCP congestion: {tcp_value}")
           print(f"  CONFIG_HZ: {hz_value}")
           PY
-
-      - name: Ensure system host linker
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ ! -x /usr/bin/ld && ! -x /usr/bin/ld.bfd ]]; then
-            sudo apt-get update
-            sudo apt-get install -y binutils
-          fi
-          if [[ ! -x /usr/bin/ld && -x /usr/bin/ld.bfd ]]; then
-            sudo ln -sfn /usr/bin/ld.bfd /usr/bin/ld
-          fi
-          test -x /usr/bin/gcc
-          test -x /usr/bin/ld
-          mkdir -p "$GITHUB_WORKSPACE/host-tool-bin"
-          ln -sfn /usr/bin/ld "$GITHUB_WORKSPACE/host-tool-bin/ld"
-          cat > "$GITHUB_WORKSPACE/host-tool-bin/gcc" <<'HOST_GCC_WRAPPER'
-          #!/usr/bin/env bash
-          set -e
-          unset GCC_EXEC_PREFIX COMPILER_PATH
-          # Pin GCC's linker lookup to Ubuntu's system binutils, not the Clang package or workspace PATH.
-          exec /usr/bin/gcc -B/usr/bin/ "$@"
-          HOST_GCC_WRAPPER
-          chmod +x "$GITHUB_WORKSPACE/host-tool-bin/gcc"
-          test -x "$GITHUB_WORKSPACE/host-tool-bin/ld"
-          test -x "$GITHUB_WORKSPACE/host-tool-bin/gcc"
-          resolved_host_ld="$("$GITHUB_WORKSPACE/host-tool-bin/gcc" -print-prog-name=ld)"
-          test -x "$resolved_host_ld"
-          printf 'GCC host linker resolved to: %s\n' "$resolved_host_ld"
-          printf '%s\n' 'int main(void) { return 0; }' | "$GITHUB_WORKSPACE/host-tool-bin/gcc" -x c -o /tmp/nocturne-host-link-test -
-          /tmp/nocturne-host-link-test
-          echo "$GITHUB_WORKSPACE/host-tool-bin" >> "$GITHUB_PATH"
-          echo "Verified host GCC wrapper and linker: $(/usr/bin/ld --version | sed -n '1p')"
 
       - name: Compile kernel
         uses: ./.github/workflows/build-process
