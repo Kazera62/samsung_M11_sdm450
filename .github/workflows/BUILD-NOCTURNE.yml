@@ -1028,7 +1028,7 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/host-tool-bin"
           ln -sfn /usr/bin/ld "$GITHUB_WORKSPACE/host-tool-bin/ld"
           test -x "$GITHUB_WORKSPACE/host-tool-bin/ld"
-          printf 'int main(void) { return 0; }\\n' | /usr/bin/gcc -B"$GITHUB_WORKSPACE/host-tool-bin/" -x c -o /tmp/nocturne-host-link-test -
+          printf '%s\n' 'int main(void) { return 0; }' | /usr/bin/gcc -B"$GITHUB_WORKSPACE/host-tool-bin/" -x c -o /tmp/nocturne-host-link-test -
           /tmp/nocturne-host-link-test
           echo "$GITHUB_WORKSPACE/host-tool-bin" >> "$GITHUB_PATH"
           echo "Verified host GCC and linker: $(/usr/bin/ld --version | sed -n '1p')"
