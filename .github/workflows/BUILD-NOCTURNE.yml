@@ -451,17 +451,6 @@ jobs:
           env_path.write_text(env_text)
           process_path = Path(".github/workflows/build-process/action.yml")
           process = process_path.read_text()
-          # Force a clean system host-tool environment inside the composite build action.
-          host_env_marker = 'cd $GITHUB_WORKSPACE/device_kernel/\n\n# Function\nBUILD_PROCESS(){'
-          host_env_hook = (
-              'cd $GITHUB_WORKSPACE/device_kernel/\n\n'
-              '# Use Ubuntu host tools independently of selected target toolchains.\n'
-              'unset GCC_EXEC_PREFIX COMPILER_PATH\n'
-              'export PATH="$GITHUB_WORKSPACE/host-tool-bin:$GITHUB_WORKSPACE/clang-custom/bin:/usr/bin:/bin:$PATH"\n\n'
-              '# Function\nBUILD_PROCESS(){'
-          )
-          process = replace_once(process, host_env_marker, host_env_hook, "host tool environment setup")
-
           config_validation_marker = "          # KPM Detect\\n"
           config_validation_hook = r'''          # Validate the final Kconfig output before any kernel compilation.
                     config="$GITHUB_WORKSPACE/device_kernel/out/.config"
