@@ -1010,6 +1010,47 @@ jobs:
           print(f"  CONFIG_HZ: {hz_value}")
           PY
 
+      - name: Fix legacy vDSO debug assembly for Neutron Clang 19
+        if: inputs.clang_profile == 'Neutron Clang 19.0.0git (Experimental)'
+        shell: bash
+        run: |
+          set -euo pipefail
+          makefile="$GITHUB_WORKSPACE/device_kernel/arch/arm64/kernel/vdso/Makefile"
+          test -s "$makefile" || {
+            echo "::error::ARM64 vDSO Makefile is missing; refusing to apply the Clang compatibility workaround."
+            exit 1
+          }
+
+          python3 - "$makefile" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          source = path.read_text()
+          workaround = "CFLAGS_REMOVE_vgettimeofday.o += -g"
+          if workaround in source.splitlines():
+              print("Neutron Clang vDSO debug workaround is already present.")
+              raise SystemExit(0)
+
+          marker = "CFLAGS_REMOVE_vgettimeofday.o = -pg -Os"
+          if source.count(marker) != 1:
+              raise SystemExit(
+                  "Expected exactly one vgettimeofday CFLAGS_REMOVE rule; "
+                  "source layout changed, so no patch was applied."
+              )
+
+          source = source.replace(
+              marker,
+              marker
+              + "\n\n# Legacy GNU assembler rejects newer Clang DWARF .file directives.\n"
+              + "# The vDSO object does not need debug info for the kernel to function.\n"
+              + workaround,
+              1,
+          )
+          path.write_text(source)
+          print("Disabled debug info only for vgettimeofday.o to avoid the legacy assembler error.")
+          PY
+
       - name: Compile kernel
         uses: ./.github/workflows/build-process
 
