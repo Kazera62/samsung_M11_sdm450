@@ -419,7 +419,7 @@ jobs:
               '[[ "' + clang_expr + ' env.CLANG_SOURCE }}" == *GononClang-15.0.7* ]]; then\n'
               '            echo "[+] Detected standalone kernel Clang toolchain; using bundled GNU binutils."\n'
               '            echo "GCC_64=CROSS_COMPILE=aarch64-linux-gnu-" >> $GITHUB_ENV\n'
-              '            echo "GCC_32=CROSS_COMPILE_ARM32=arm-linux-gnueabi-" >> $GITHUB_ENV'
+              '            echo "GCC_32=CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/gcc-32/bin/arm-linux-androideabi-" >> $GITHUB_ENV'
           )
           env_text = replace_once(
               env_text,
