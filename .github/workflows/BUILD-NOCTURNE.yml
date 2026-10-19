@@ -1105,7 +1105,7 @@ jobs:
           # only the experimental Clang 19 build.
           strict_proto_flag = "KBUILD_CFLAGS += -Wno-error=strict-prototypes"
           if strict_proto_flag not in kernel_source.splitlines():
-              cflags_anchor = "KBUILD_CFLAGS\\t+= $(CLANG_FLAGS)"
+              cflags_anchor = "KBUILD_CFLAGS\t+= $(CLANG_FLAGS)"
               if kernel_source.count(cflags_anchor) != 1:
                   raise SystemExit(
                       "Expected exactly one KBUILD_CFLAGS CLANG_FLAGS insertion point; "
@@ -1114,7 +1114,7 @@ jobs:
               kernel_source = kernel_source.replace(
                   cflags_anchor,
                   cflags_anchor
-                  + "\\n# Neutron Clang 19 compatibility: keep strict-prototypes as a warning.\\n"
+                  + "\n# Neutron Clang 19 compatibility: keep strict-prototypes as a warning.\n"
                   + strict_proto_flag,
                   1,
               )
