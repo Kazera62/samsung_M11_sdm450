@@ -1099,6 +1099,30 @@ jobs:
                   "source layout is unexpected, so the assembler change was not applied."
               )
 
+          # Older scripts/kallsyms.c filters uppercase 'N' debugging symbols but
+          # misses lowercase 'n' symbols emitted by modern LLVM/ELF tooling. With
+          # CONFIG_EFI and relative kallsyms enabled, those symbols can corrupt the
+          # relative base and stop vmlinux with "relative symbol value out of range".
+          # Ignore lowercase 'n' symbols as well; this is only applied for Clang 19.
+          kallsyms_path = kernel_path.parent / "scripts/kallsyms.c"
+          if not kallsyms_path.is_file():
+              raise SystemExit("scripts/kallsyms.c is missing; cannot apply the Clang 19 kallsyms compatibility fix.")
+          kallsyms_source = kallsyms_path.read_text()
+          old_debug_filter = "else if (stype == 'N')"
+          new_debug_filter = "else if (stype == 'N' || stype == 'n')"
+          filter_count = kallsyms_source.count(old_debug_filter)
+          if filter_count == 1:
+              kallsyms_source = kallsyms_source.replace(old_debug_filter, new_debug_filter, 1)
+              kallsyms_path.write_text(kallsyms_source)
+              print("Applied Clang 19 kallsyms compatibility fix: ignore lowercase 'n' debug symbols.")
+          elif filter_count == 0 and new_debug_filter in kallsyms_source:
+              print("Clang 19 kallsyms compatibility fix already present.")
+          else:
+              raise SystemExit(
+                  "Expected exactly one kallsyms uppercase-N debug-symbol filter; "
+                  f"found {filter_count}. Refusing an unsafe patch."
+              )
+
           # Fix the exact legacy declarations rejected by Clang 19. These are
           # no-argument functions, so adding (void) preserves their behaviour.
           # Keep this scoped to the experimental compiler profile.
