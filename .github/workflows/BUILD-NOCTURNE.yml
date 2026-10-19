@@ -1113,6 +1113,12 @@ jobs:
               "drivers/video/fbdev/msm/mdss_mdp.c": (
                   ("struct irq_info *mdss_intr_line()", "struct irq_info *mdss_intr_line(void)"),
               ),
+              "drivers/staging/prima/CORE/MAC/src/pe/lim/limTrace.c": (
+                  ("void lim_register_debug_callback()", "void lim_register_debug_callback(void)"),
+              ),
+              "drivers/video/fbdev/msm/mdss_util.c": (
+                  ("struct mdss_util_intf *mdss_get_util_intf()", "struct mdss_util_intf *mdss_get_util_intf(void)"),
+              ),
           }
           source_root = kernel_path.parent
           for relative_path, replacements in prototype_fixes.items():
