@@ -19,7 +19,7 @@ on:
           - Proton Clang
           - ZyC Clang 12.0.1
           - Neutron Clang 14.0.0
-          - Neutron Clang 19.0.0git (Experimental)
+          - Neutron Clang 19.0.0
       root:
         description: "Root implementation"
         required: true
@@ -113,7 +113,7 @@ env:
 
   KERNEL_SOURCE: "https://github.com/Kazera62/samsung_M11_sdm450.git"
 
-  CLANG_SOURCE: "${{ inputs.clang_profile == 'Proton Clang' && 'https://github.com/kdrag0n/proton-clang.git' || inputs.clang_profile == 'ZyC Clang 12.0.1' && 'https://github.com/ZyCromerZ/Clang/releases/download/12.0.1-20230207-release/Clang-12.0.1-20230207.tar.gz' || inputs.clang_profile == 'Neutron Clang 14.0.0' && 'https://github.com/tw3akslow/neutron-toolchain.git' || inputs.clang_profile == 'Neutron Clang 19.0.0git (Experimental)' && 'https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman' || 'https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b.git' }}"
+  CLANG_SOURCE: "${{ inputs.clang_profile == 'Proton Clang' && 'https://github.com/kdrag0n/proton-clang.git' || inputs.clang_profile == 'ZyC Clang 12.0.1' && 'https://github.com/ZyCromerZ/Clang/releases/download/12.0.1-20230207-release/Clang-12.0.1-20230207.tar.gz' || inputs.clang_profile == 'Neutron Clang 14.0.0' && 'https://github.com/tw3akslow/neutron-toolchain.git' || inputs.clang_profile == 'Neutron Clang 19.0.0' && 'https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman' || 'https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b.git' }}"
   CLANG_BRANCH: "${{ inputs.clang_profile == 'Proton Clang' && 'master' || inputs.clang_profile == 'Neutron Clang 14.0.0' && 'Neutron-14' || 'lineage-20.0' }}"
 
   GCC_GNU: "false"
@@ -1033,7 +1033,7 @@ jobs:
           PY
 
       - name: Prepare Neutron Clang 19 assembler compatibility
-        if: inputs.clang_profile == 'Neutron Clang 19.0.0git (Experimental)'
+        if: inputs.clang_profile == 'Neutron Clang 19.0.0'
         shell: bash
         run: |
           set -euo pipefail
