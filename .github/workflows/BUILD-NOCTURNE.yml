@@ -1122,6 +1122,18 @@ jobs:
               "drivers/staging/prima/CORE/SME/src/sme_common/sme_Trace.c": (
                   ("void sme_register_debug_callback()", "void sme_register_debug_callback(void)"),
               ),
+              "drivers/staging/prima/CORE/SVC/src/nlink/wlan_nlink_srv.c": (
+                  ("int nl_srv_is_initialized()", "int nl_srv_is_initialized(void)"),
+              ),
+              "drivers/staging/prima/CORE/SVC/src/btc/wlan_btc_svc.c": (
+                  ("void btc_deactivate_service()", "void btc_deactivate_service(void)"),
+              ),
+              "drivers/staging/prima/CORE/SVC/src/logging/wlan_logging_sock_svc.c": (
+                  ("void wlan_disable_and_flush_pkt_stats()", "void wlan_disable_and_flush_pkt_stats(void)"),
+                  ("void wlan_flush_host_logs_for_fatal()", "void wlan_flush_host_logs_for_fatal(void)"),
+                  ("bool wlan_fwr_mem_dump_test_and_set_write_allowed_bit(){", "bool wlan_fwr_mem_dump_test_and_set_write_allowed_bit(void){"),
+                  ("bool wlan_fwr_mem_dump_test_and_set_read_allowed_bit(){", "bool wlan_fwr_mem_dump_test_and_set_read_allowed_bit(void){"),
+              ),
           }
           source_root = kernel_path.parent
           for relative_path, replacements in prototype_fixes.items():
