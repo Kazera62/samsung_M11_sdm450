@@ -1155,6 +1155,9 @@ jobs:
               "drivers/staging/prima/CORE/WDI/CP/src/wlan_qct_wdi.c": (
                   ("void WDI_TransportKickDxe()", "void WDI_TransportKickDxe(void)"),
               ),
+              "drivers/staging/prima/CORE/WDI/TRP/DTS/src/wlan_qct_wdi_dts.c": (
+                  ("void WDTS_ChannelKickDxe()", "void WDTS_ChannelKickDxe(void)"),
+              ),
           }
           source_root = kernel_path.parent
           for relative_path, replacements in prototype_fixes.items():
