@@ -1140,6 +1140,15 @@ jobs:
               "drivers/staging/prima/CORE/VOSS/src/vos_nvitem.c": (
                   ("v_BOOL_t vos_is_nv_country_non_zero()", "v_BOOL_t vos_is_nv_country_non_zero(void)"),
               ),
+              "drivers/staging/prima/CORE/VOSS/src/vos_timer.c": (
+                  ("void vos_wdthread_flush_timer_work()", "void vos_wdthread_flush_timer_work(void)"),
+              ),
+              "drivers/staging/prima/CORE/VOSS/src/vos_trace.c": (
+                  ("void vosTraceInit()", "void vosTraceInit(void)"),
+                  ("void vos_register_debugcb_init()", "void vos_register_debugcb_init(void)"),
+                  ("VOS_STATUS vos_trace_spin_lock_init()", "VOS_STATUS vos_trace_spin_lock_init(void)"),
+                  ("void vos_state_info_dump_all()", "void vos_state_info_dump_all(void)"),
+              ),
           }
           source_root = kernel_path.parent
           for relative_path, replacements in prototype_fixes.items():
