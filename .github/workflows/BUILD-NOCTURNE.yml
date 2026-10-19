@@ -39,53 +39,53 @@ on:
         type: boolean
         default: false
       cpu_default_governor:
-        description: "Default CPU governor (options enabled in the current defconfig)"
+        description: "CPU governor: highest responsiveness first; performance is the default"
         required: true
         type: choice
         default: performance
         options:
           - performance
-          - powersave
-          - userspace
-          - ondemand
           - interactive
-          - conservative
           - schedutil
+          - ondemand
+          - conservative
+          - userspace
+          - powersave
       io_default_scheduler:
-        description: "Default block I/O scheduler (options enabled in the current defconfig)"
+        description: "Block I/O scheduler: flash-oriented low overhead first; noop is the default"
         required: true
         type: choice
-        default: cfq
+        default: noop
         options:
-          - cfq
           - noop
           - deadline
+          - cfq
       compression_algorithm:
-        description: "Default zRAM compression algorithm; boot image remains Image.gz-dtb"
+        description: "zRAM compressor: speed-first order; lz4 is the default"
         required: true
         type: choice
         default: lz4
         options:
           - lz4
-          - lz4hc
           - lzo
           - zstd
+          - lz4hc
       tcp_default_congestion:
-        description: "Default TCP congestion-control algorithm supported by this defconfig"
+        description: "TCP congestion control: general-purpose performance first; BBR is the default (best choice varies by network)"
         required: true
         type: choice
-        default: bic
+        default: bbr
         options:
-          - bic
+          - bbr
           - cubic
+          - westwood
           - htcp
           - hybla
-          - vegas
           - veno
-          - westwood
-          - dctcp
+          - vegas
           - cdg
-          - bbr
+          - dctcp
+          - bic
           - reno
       config_hz:
         description: "Kernel timer tick rate (CONFIG_HZ)"
