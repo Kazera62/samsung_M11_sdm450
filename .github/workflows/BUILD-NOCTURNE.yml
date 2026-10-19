@@ -1099,29 +1099,45 @@ jobs:
                   "source layout is unexpected, so the assembler change was not applied."
               )
 
-          # Linux 4.9 contains legacy empty-parameter-list declarations. Newer
-          # Clang promotes -Wstrict-prototypes to an error in several old drivers.
-          # Keep the warning enabled, but don't let this one warning class stop
-          # only the experimental Clang 19 build.
-          strict_proto_flag = "KBUILD_CFLAGS += -Wno-error=strict-prototypes"
-          if strict_proto_flag not in kernel_source.splitlines():
-              cflags_anchor = "KBUILD_CFLAGS\t+= $(CLANG_FLAGS)"
-              if kernel_source.count(cflags_anchor) != 1:
+          # Fix the exact legacy declarations rejected by Clang 19. These are
+          # no-argument functions, so adding (void) preserves their behaviour.
+          # Keep this scoped to the experimental compiler profile.
+          prototype_fixes = {
+              "drivers/staging/prima/CORE/HDD/src/wlan_hdd_trace.c": (
+                  ("void hddTraceInit()", "void hddTraceInit(void)"),
+                  (
+                      "void hdd_register_debug_callback()",
+                      "void hdd_register_debug_callback(void)",
+                  ),
+              ),
+              "drivers/video/fbdev/msm/mdss_mdp.c": (
+                  ("struct irq_info *mdss_intr_line()", "struct irq_info *mdss_intr_line(void)"),
+              ),
+          }
+          source_root = kernel_path.parent
+          for relative_path, replacements in prototype_fixes.items():
+              source_path = source_root / relative_path
+              if not source_path.is_file():
                   raise SystemExit(
-                      "Expected exactly one KBUILD_CFLAGS CLANG_FLAGS insertion point; "
-                      "strict-prototype compatibility flag was not applied."
+                      f"Required Clang 19 compatibility source is missing: {relative_path}"
                   )
-              kernel_source = kernel_source.replace(
-                  cflags_anchor,
-                  cflags_anchor
-                  + "\n# Neutron Clang 19 compatibility: keep strict-prototypes as a warning.\n"
-                  + strict_proto_flag,
-                  1,
-              )
-              kernel_path.write_text(kernel_source)
-              print("Added Clang 19-only -Wno-error=strict-prototypes compatibility flag.")
-          else:
-              print("Clang 19 strict-prototype compatibility flag already present.")
+              source = source_path.read_text()
+              changed = False
+              for old_declaration, new_declaration in replacements:
+                  count = source.count(old_declaration)
+                  if count == 1:
+                      source = source.replace(old_declaration, new_declaration, 1)
+                      print(f"Patched {relative_path}: {old_declaration} -> {new_declaration}")
+                      changed = True
+                  elif count == 0 and new_declaration in source:
+                      print(f"Already patched {relative_path}: {new_declaration}")
+                  else:
+                      raise SystemExit(
+                          f"Expected exactly one occurrence of {old_declaration!r} in "
+                          f"{relative_path}, found {count}; refusing an unsafe patch."
+                      )
+              if changed:
+                  source_path.write_text(source)
           PY
 
       - name: Compile kernel
