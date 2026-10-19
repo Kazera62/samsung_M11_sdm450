@@ -1031,45 +1031,72 @@ jobs:
           print(f"  CONFIG_HZ: {hz_value}")
           PY
 
-      - name: Fix legacy vDSO debug assembly for Neutron Clang 19
+      - name: Prepare Neutron Clang 19 assembler compatibility
         if: inputs.clang_profile == 'Neutron Clang 19.0.0git (Experimental)'
         shell: bash
         run: |
           set -euo pipefail
-          makefile="$GITHUB_WORKSPACE/device_kernel/arch/arm64/kernel/vdso/Makefile"
-          test -s "$makefile" || {
-            echo "::error::ARM64 vDSO Makefile is missing; refusing to apply the Clang compatibility workaround."
+          vdso_makefile="$GITHUB_WORKSPACE/device_kernel/arch/arm64/kernel/vdso/Makefile"
+          kernel_makefile="$GITHUB_WORKSPACE/device_kernel/Makefile"
+          test -s "$vdso_makefile" || {
+            echo "::error::ARM64 vDSO Makefile is missing; refusing to apply the compatibility workaround."
+            exit 1
+          }
+          test -s "$kernel_makefile" || {
+            echo "::error::Kernel Makefile is missing; refusing to configure the integrated assembler."
             exit 1
           }
 
-          python3 - "$makefile" <<'PY'
+          python3 - "$vdso_makefile" "$kernel_makefile" <<'PY'
           from pathlib import Path
+          import re
           import sys
 
-          path = Path(sys.argv[1])
-          source = path.read_text()
-          workaround = "CFLAGS_REMOVE_vgettimeofday.o += -g"
-          if workaround in source.splitlines():
-              print("Neutron Clang vDSO debug workaround is already present.")
-              raise SystemExit(0)
+          vdso_path = Path(sys.argv[1])
+          kernel_path = Path(sys.argv[2])
 
-          marker = "CFLAGS_REMOVE_vgettimeofday.o = -pg -Os"
-          if source.count(marker) != 1:
-              raise SystemExit(
-                  "Expected exactly one vgettimeofday CFLAGS_REMOVE rule; "
-                  "source layout changed, so no patch was applied."
+          # First, preserve the narrowly scoped workaround for vDSO debug metadata.
+          vdso_source = vdso_path.read_text()
+          vdso_workaround = "CFLAGS_REMOVE_vgettimeofday.o += -g"
+          if vdso_workaround not in vdso_source.splitlines():
+              vdso_marker = "CFLAGS_REMOVE_vgettimeofday.o = -pg -Os"
+              if vdso_source.count(vdso_marker) != 1:
+                  raise SystemExit(
+                      "Expected exactly one vgettimeofday CFLAGS_REMOVE rule; "
+                      "source layout changed, so no vDSO patch was applied."
+                  )
+              vdso_source = vdso_source.replace(
+                  vdso_marker,
+                  vdso_marker
+                  + "\n\n# Legacy GNU assembler rejects newer Clang DWARF .file directives.\n"
+                  + "# The vDSO object does not need debug info for the kernel to function.\n"
+                  + vdso_workaround,
+                  1,
               )
+              vdso_path.write_text(vdso_source)
+              print("Applied vDSO debug compatibility workaround.")
+          else:
+              print("vDSO debug compatibility workaround already present.")
 
-          source = source.replace(
-              marker,
-              marker
-              + "\n\n# Legacy GNU assembler rejects newer Clang DWARF .file directives.\n"
-              + "# The vDSO object does not need debug info for the kernel to function.\n"
-              + workaround,
-              1,
+          # Linux 4.9 explicitly disables Clang's integrated assembler. Clang 19
+          # emits newer .file metadata that the bundled legacy GNU assembler rejects.
+          kernel_source = kernel_path.read_text()
+          legacy_flag = re.compile(
+              r"^[ \t]*CLANG_FLAGS[ \t]*\+=[ \t]*-no-integrated-as[ \t]*(?:#.*)?$",
+              re.MULTILINE,
           )
-          path.write_text(source)
-          print("Disabled debug info only for vgettimeofday.o to avoid the legacy assembler error.")
+          matches = list(legacy_flag.finditer(kernel_source))
+          if len(matches) == 1:
+              kernel_source = legacy_flag.sub("", kernel_source, count=1)
+              kernel_path.write_text(kernel_source)
+              print("Removed the Linux 4.9 -no-integrated-as flag for Neutron Clang 19.")
+          elif len(matches) == 0 and "-no-integrated-as" not in kernel_source:
+              print("Kernel Makefile already allows Clang's integrated assembler.")
+          else:
+              raise SystemExit(
+                  "Expected exactly one standalone CLANG_FLAGS -no-integrated-as line; "
+                  "source layout is unexpected, so the assembler change was not applied."
+              )
           PY
 
       - name: Compile kernel
