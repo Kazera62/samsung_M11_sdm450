@@ -10,16 +10,16 @@ on:
         type: string
         default: NOCTURNE
       clang_profile:
-        description: "Compiler toolchain; Clang r416183b is the recommended baseline for this Linux 4.9 kernel"
+        description: "Compiler toolchain ordered by verified compatibility with this Linux 4.9 kernel"
         required: true
         type: choice
         default: Clang r416183b
         options:
           - Clang r416183b
+          - Neutron Clang 19.0.0
+          - Neutron Clang 14.0.0
           - Proton Clang
           - ZyC Clang 12.0.1
-          - Neutron Clang 14.0.0
-          - Neutron Clang 19.0.0
       root:
         description: "Root implementation"
         required: true
