@@ -1098,6 +1098,30 @@ jobs:
                   "Expected exactly one standalone CLANG_FLAGS -no-integrated-as line; "
                   "source layout is unexpected, so the assembler change was not applied."
               )
+
+          # Linux 4.9 contains legacy empty-parameter-list declarations. Newer
+          # Clang promotes -Wstrict-prototypes to an error in several old drivers.
+          # Keep the warning enabled, but don't let this one warning class stop
+          # only the experimental Clang 19 build.
+          strict_proto_flag = "KBUILD_CFLAGS += -Wno-error=strict-prototypes"
+          if strict_proto_flag not in kernel_source.splitlines():
+              cflags_anchor = "KBUILD_CFLAGS\\t+= $(CLANG_FLAGS)"
+              if kernel_source.count(cflags_anchor) != 1:
+                  raise SystemExit(
+                      "Expected exactly one KBUILD_CFLAGS CLANG_FLAGS insertion point; "
+                      "strict-prototype compatibility flag was not applied."
+                  )
+              kernel_source = kernel_source.replace(
+                  cflags_anchor,
+                  cflags_anchor
+                  + "\\n# Neutron Clang 19 compatibility: keep strict-prototypes as a warning.\\n"
+                  + strict_proto_flag,
+                  1,
+              )
+              kernel_path.write_text(kernel_source)
+              print("Added Clang 19-only -Wno-error=strict-prototypes compatibility flag.")
+          else:
+              print("Clang 19 strict-prototype compatibility flag already present.")
           PY
 
       - name: Compile kernel
