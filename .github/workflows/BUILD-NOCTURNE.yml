@@ -48,6 +48,7 @@ on:
           - powersave
           - userspace
           - ondemand
+          - interactive
           - conservative
           - schedutil
       io_default_scheduler:
@@ -58,6 +59,7 @@ on:
         options:
           - cfq
           - noop
+          - deadline
       compression_algorithm:
         description: "Default zRAM compression algorithm; boot image remains Image.gz-dtb"
         required: true
@@ -65,7 +67,9 @@ on:
         default: lz4
         options:
           - lz4
+          - lz4hc
           - lzo
+          - zstd
       tcp_default_congestion:
         description: "Default TCP congestion-control algorithm supported by this defconfig"
         required: true
@@ -75,7 +79,13 @@ on:
           - bic
           - cubic
           - htcp
+          - hybla
+          - vegas
+          - veno
           - westwood
+          - dctcp
+          - cdg
+          - bbr
           - reno
       config_hz:
         description: "Kernel timer tick rate (CONFIG_HZ)"
@@ -499,7 +509,7 @@ jobs:
                     # Re-apply CPU governor and timer choices to the final output config
                     # after defconfig and any optional config merges.
                     case "$CPU_DEFAULT_GOVERNOR" in
-                      performance|powersave|userspace|ondemand|conservative|schedutil) cpu_gov_upper="$(printf '%s' "$CPU_DEFAULT_GOVERNOR" | tr '[:lower:]' '[:upper:]')" ;;
+                      performance|powersave|userspace|ondemand|interactive|conservative|schedutil) cpu_gov_upper="$(printf '%s' "$CPU_DEFAULT_GOVERNOR" | tr '[:lower:]' '[:upper:]')" ;;
                       *) echo "::error::Invalid CPU governor selection: $CPU_DEFAULT_GOVERNOR"; exit 1 ;;
                     esac
                     sed -i -E '/^(CONFIG_CPU_FREQ_DEFAULT_GOV_(PERFORMANCE|POWERSAVE|USERSPACE|ONDEMAND|CONSERVATIVE|INTERACTIVE|SCHEDUTIL)=y|# CONFIG_CPU_FREQ_DEFAULT_GOV_(PERFORMANCE|POWERSAVE|USERSPACE|ONDEMAND|CONSERVATIVE|INTERACTIVE|SCHEDUTIL) is not set)$/d' "$config"
@@ -524,7 +534,7 @@ jobs:
                     }
 
                     case "$CPU_DEFAULT_GOVERNOR" in
-                      performance|powersave|userspace|ondemand|conservative|schedutil) cpu_gov_upper="$(printf '%s' "$CPU_DEFAULT_GOVERNOR" | tr '[:lower:]' '[:upper:]')" ;;
+                      performance|powersave|userspace|ondemand|interactive|conservative|schedutil) cpu_gov_upper="$(printf '%s' "$CPU_DEFAULT_GOVERNOR" | tr '[:lower:]' '[:upper:]')" ;;
                       *) echo "::error::Invalid CPU governor selection: $CPU_DEFAULT_GOVERNOR"; exit 1 ;;
                     esac
                     require_config "CONFIG_CPU_FREQ_GOV_$cpu_gov_upper=y"
@@ -536,7 +546,7 @@ jobs:
                     fi
 
                     case "$IO_DEFAULT_SCHEDULER" in
-                      cfq|noop) io_upper="$(printf '%s' "$IO_DEFAULT_SCHEDULER" | tr '[:lower:]' '[:upper:]')" ;;
+                      cfq|noop|deadline) io_upper="$(printf '%s' "$IO_DEFAULT_SCHEDULER" | tr '[:lower:]' '[:upper:]')" ;;
                       *) echo "::error::Invalid I/O scheduler selection: $IO_DEFAULT_SCHEDULER"; exit 1 ;;
                     esac
                     require_config "CONFIG_IOSCHED_$io_upper=y"
@@ -549,7 +559,7 @@ jobs:
                     fi
 
                     case "$TCP_DEFAULT_CONGESTION" in
-                      bic|cubic|htcp|westwood|reno) tcp_lower="$TCP_DEFAULT_CONGESTION"; tcp_upper="$(printf '%s' "$tcp_lower" | tr '[:lower:]' '[:upper:]')" ;;
+                      bic|cubic|htcp|hybla|vegas|veno|westwood|dctcp|cdg|bbr|reno) tcp_lower="$TCP_DEFAULT_CONGESTION"; tcp_upper="$(printf '%s' "$tcp_lower" | tr '[:lower:]' '[:upper:]')" ;;
                       *) echo "::error::Invalid TCP congestion selection: $TCP_DEFAULT_CONGESTION"; exit 1 ;;
                     esac
                     if [[ "$tcp_lower" != "reno" ]]; then
@@ -619,7 +629,7 @@ jobs:
                     fi
 
                     case "$ZRAM_COMPRESSION" in
-                      lzo|lz4) zram_upper="$(printf '%s' "$ZRAM_COMPRESSION" | tr '[:lower:]' '[:upper:]')" ;;
+                      lzo|lz4|lz4hc|zstd) zram_upper="$(printf '%s' "$ZRAM_COMPRESSION" | tr '[:lower:]' '[:upper:]')" ;;
                       *) echo "::error::Invalid zRAM compression selection: $ZRAM_COMPRESSION"; exit 1 ;;
                     esac
                     require_config "CONFIG_ZRAM=y"
@@ -629,7 +639,7 @@ jobs:
                       echo "::error::Selected zRAM compressor was not retained in zram_drv.c."
                       exit 1
                     fi
-                    compression_count="$(grep -Ec '^static const char [*]default_compressor = "(lzo|lz4)";$' "$zram_driver" || true)"
+                    compression_count="$(grep -Ec '^static const char [*]default_compressor = "(lzo|lz4|lz4hc|zstd)";$' "$zram_driver" || true)"
                     if [[ "$compression_count" != "1" ]]; then
                       echo "::error::Expected exactly one supported zRAM default compressor declaration, found $compression_count."
                       exit 1
@@ -884,6 +894,7 @@ jobs:
               "powersave": "POWERSAVE",
               "userspace": "USERSPACE",
               "ondemand": "ONDEMAND",
+              "interactive": "INTERACTIVE",
               "conservative": "CONSERVATIVE",
               "schedutil": "SCHEDUTIL",
           }
@@ -899,7 +910,11 @@ jobs:
           if f"config CPU_FREQ_GOV_{gov_upper}" not in cpufreq_kconfig:
               fail(f"CPU governor implementation is missing: {gov_upper}")
 
-          io_map = {"cfq": ("CFQ", "cfq"), "noop": ("NOOP", "noop")}
+          io_map = {
+              "cfq": ("CFQ", "cfq"),
+              "noop": ("NOOP", "noop"),
+              "deadline": ("DEADLINE", "deadline"),
+          }
           io_value = os.environ.get("IO_DEFAULT_SCHEDULER", "")
           if io_value not in io_map:
               fail(f"Unsupported I/O scheduler input: {io_value}")
@@ -910,7 +925,12 @@ jobs:
           if f"config DEFAULT_{io_upper}" not in iosched_kconfig:
               fail(f"Default I/O scheduler choice is missing: {io_upper}")
 
-          compression_map = {"lzo": "LZO", "lz4": "LZ4"}
+          compression_map = {
+              "lzo": "LZO",
+              "lz4": "LZ4",
+              "lz4hc": "LZ4HC",
+              "zstd": "ZSTD",
+          }
           compression = os.environ.get("ZRAM_COMPRESSION", "")
           if compression not in compression_map:
               fail(f"Unsupported zRAM compression input: {compression}")
@@ -930,7 +950,13 @@ jobs:
               "bic": ("BIC", "bic"),
               "cubic": ("CUBIC", "cubic"),
               "htcp": ("HTCP", "htcp"),
+              "hybla": ("HYBLA", "hybla"),
+              "vegas": ("VEGAS", "vegas"),
+              "veno": ("VENO", "veno"),
               "westwood": ("WESTWOOD", "westwood"),
+              "dctcp": ("DCTCP", "dctcp"),
+              "cdg": ("CDG", "cdg"),
+              "bbr": ("BBR", "bbr"),
               "reno": ("RENO", "reno"),
           }
           tcp_value = os.environ.get("TCP_DEFAULT_CONGESTION", "")
@@ -1245,7 +1271,7 @@ jobs:
           }
 
           case "$CPU_DEFAULT_GOVERNOR" in
-            performance|powersave|userspace|ondemand|conservative|schedutil) cpu_gov_upper="$(printf '%s' "$CPU_DEFAULT_GOVERNOR" | tr '[:lower:]' '[:upper:]')" ;;
+            performance|powersave|userspace|ondemand|interactive|conservative|schedutil) cpu_gov_upper="$(printf '%s' "$CPU_DEFAULT_GOVERNOR" | tr '[:lower:]' '[:upper:]')" ;;
             *) echo "::error::Invalid CPU governor selection: $CPU_DEFAULT_GOVERNOR"; exit 1 ;;
           esac
 
