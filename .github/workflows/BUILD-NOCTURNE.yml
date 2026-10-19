@@ -1149,6 +1149,9 @@ jobs:
                   ("VOS_STATUS vos_trace_spin_lock_init()", "VOS_STATUS vos_trace_spin_lock_init(void)"),
                   ("void vos_state_info_dump_all()", "void vos_state_info_dump_all(void)"),
               ),
+              "drivers/staging/prima/CORE/WDA/src/wlan_qct_wda.c": (
+                  ("void WDA_TransportKickDxe()", "void WDA_TransportKickDxe(void)"),
+              ),
           }
           source_root = kernel_path.parent
           for relative_path, replacements in prototype_fixes.items():
