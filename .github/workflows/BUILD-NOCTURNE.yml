@@ -39,7 +39,7 @@ on:
         type: boolean
         default: false
       cpu_default_governor:
-        description: "Interactive remains compiled, but is excluded as a boot-time default because it caused bootloop in device testing"
+        description: "Default CPU governor"
         required: true
         type: choice
         default: performance
