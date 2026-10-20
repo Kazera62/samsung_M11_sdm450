@@ -10,12 +10,13 @@ on:
         type: string
         default: NOCTURNE
       clang_profile:
-        description: "Compiler toolchain ordered by verified compatibility with this Linux 4.9 kernel"
+        description: "Compiler toolchain for this Linux 4.9 kernel"
         required: true
         type: choice
         default: Clang r416183b
         options:
           - Clang r416183b
+          - Neutron Clang 24.0.0git (06092026)
           - Neutron Clang 19.0.0
           - Neutron Clang 14.0.0
           - Proton Clang
@@ -122,8 +123,9 @@ env:
 
   KERNEL_SOURCE: "https://github.com/Kazera62/samsung_M11_sdm450.git"
 
-  CLANG_SOURCE: "${{ inputs.clang_profile == 'Proton Clang' && 'https://github.com/kdrag0n/proton-clang.git' || inputs.clang_profile == 'ZyC Clang 12.0.1' && 'https://github.com/ZyCromerZ/Clang/releases/download/12.0.1-20230207-release/Clang-12.0.1-20230207.tar.gz' || inputs.clang_profile == 'Neutron Clang 14.0.0' && 'https://github.com/tw3akslow/neutron-toolchain.git' || inputs.clang_profile == 'Neutron Clang 19.0.0' && 'https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman' || 'https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b.git' }}"
+  CLANG_SOURCE: "${{ inputs.clang_profile == 'Proton Clang' && 'https://github.com/kdrag0n/proton-clang.git' || inputs.clang_profile == 'ZyC Clang 12.0.1' && 'https://github.com/ZyCromerZ/Clang/releases/download/12.0.1-20230207-release/Clang-12.0.1-20230207.tar.gz' || inputs.clang_profile == 'Neutron Clang 14.0.0' && 'https://github.com/tw3akslow/neutron-toolchain.git' || inputs.clang_profile == 'Neutron Clang 24.0.0git (06092026)' && 'https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman' || inputs.clang_profile == 'Neutron Clang 19.0.0' && 'https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman' || 'https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b.git' }}"
   CLANG_BRANCH: "${{ inputs.clang_profile == 'Proton Clang' && 'master' || inputs.clang_profile == 'Neutron Clang 14.0.0' && 'Neutron-14' || 'lineage-20.0' }}"
+  CLANG_NEUTRON_TAG: "${{ inputs.clang_profile == 'Neutron Clang 24.0.0git (06092026)' && '06092026' || '10032024' }}"
 
   GCC_GNU: "false"
   GCC_64_SOURCE: "https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git"
@@ -434,6 +436,12 @@ jobs:
               old_clang_selector,
               new_clang_selector,
               "standalone kernel Clang selector",
+          )
+          env_text = replace_once(
+              env_text,
+              "bash antman -S=10032024",
+              'bash antman -S="$CLANG_NEUTRON_TAG"',
+              "Neutron Clang AntMan release selector",
           )
           env_text = replace_once(
               env_text,
@@ -1056,8 +1064,8 @@ jobs:
           print(f"  CONFIG_HZ: {hz_value}")
           PY
 
-      - name: Prepare Neutron Clang 19 assembler compatibility
-        if: inputs.clang_profile == 'Neutron Clang 19.0.0'
+      - name: Prepare modern Neutron Clang assembler compatibility
+        if: inputs.clang_profile == 'Neutron Clang 19.0.0' || inputs.clang_profile == 'Neutron Clang 24.0.0git (06092026)'
         shell: bash
         run: |
           set -euo pipefail
@@ -1103,7 +1111,7 @@ jobs:
           else:
               print("vDSO debug compatibility workaround already present.")
 
-          # Linux 4.9 explicitly disables Clang's integrated assembler. Clang 19
+          # Linux 4.9 explicitly disables Clang's integrated assembler. Modern Neutron Clang
           # emits newer .file metadata that the bundled legacy GNU assembler rejects.
           kernel_source = kernel_path.read_text()
           legacy_flag = re.compile(
@@ -1114,7 +1122,7 @@ jobs:
           if len(matches) == 1:
               kernel_source = legacy_flag.sub("", kernel_source, count=1)
               kernel_path.write_text(kernel_source)
-              print("Removed the Linux 4.9 -no-integrated-as flag for Neutron Clang 19.")
+              print("Removed the Linux 4.9 -no-integrated-as flag for modern Neutron Clang.")
           elif len(matches) == 0 and "-no-integrated-as" not in kernel_source:
               print("Kernel Makefile already allows Clang's integrated assembler.")
           else:
@@ -1127,10 +1135,10 @@ jobs:
           # misses lowercase 'n' symbols emitted by modern LLVM/ELF tooling. With
           # CONFIG_EFI and relative kallsyms enabled, those symbols can corrupt the
           # relative base and stop vmlinux with "relative symbol value out of range".
-          # Ignore lowercase 'n' symbols as well; this is only applied for Clang 19.
+          # Ignore lowercase 'n' symbols as well; this is only applied for the selected modern Neutron Clang profiles.
           kallsyms_path = kernel_path.parent / "scripts/kallsyms.c"
           if not kallsyms_path.is_file():
-              raise SystemExit("scripts/kallsyms.c is missing; cannot apply the Clang 19 kallsyms compatibility fix.")
+              raise SystemExit("scripts/kallsyms.c is missing; cannot apply the Neutron Clang kallsyms compatibility fix.")
           kallsyms_source = kallsyms_path.read_text()
           old_debug_filter = "else if (stype == 'N')"
           new_debug_filter = "else if (stype == 'N' || stype == 'n')"
@@ -1138,16 +1146,16 @@ jobs:
           if filter_count == 1:
               kallsyms_source = kallsyms_source.replace(old_debug_filter, new_debug_filter, 1)
               kallsyms_path.write_text(kallsyms_source)
-              print("Applied Clang 19 kallsyms compatibility fix: ignore lowercase 'n' debug symbols.")
+              print("Applied Neutron Clang kallsyms compatibility fix: ignore lowercase 'n' debug symbols.")
           elif filter_count == 0 and new_debug_filter in kallsyms_source:
-              print("Clang 19 kallsyms compatibility fix already present.")
+              print("Neutron Clang kallsyms compatibility fix already present.")
           else:
               raise SystemExit(
                   "Expected exactly one kallsyms uppercase-N debug-symbol filter; "
                   f"found {filter_count}. Refusing an unsafe patch."
               )
 
-          # Fix the exact legacy declarations rejected by Clang 19. These are
+          # Fix the exact legacy declarations rejected by modern Clang. These are
           # no-argument functions, so adding (void) preserves their behaviour.
           # Keep this scoped to the experimental compiler profile.
           prototype_fixes = {
@@ -1212,7 +1220,7 @@ jobs:
               source_path = source_root / relative_path
               if not source_path.is_file():
                   raise SystemExit(
-                      f"Required Clang 19 compatibility source is missing: {relative_path}"
+                      f"Required Neutron Clang compatibility source is missing: {relative_path}"
                   )
               source = source_path.read_text()
               changed = False
