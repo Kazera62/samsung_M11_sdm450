@@ -39,13 +39,12 @@ on:
         type: boolean
         default: false
       cpu_default_governor:
-        description: "CPU governor: highest responsiveness first; performance is the default"
+        description: "Interactive remains compiled, but is excluded as a boot-time default because it caused bootloop in device testing"
         required: true
         type: choice
         default: performance
         options:
           - performance
-          - interactive
           - schedutil
           - ondemand
           - conservative
@@ -509,7 +508,7 @@ jobs:
                     # Re-apply CPU governor and timer choices to the final output config
                     # after defconfig and any optional config merges.
                     case "$CPU_DEFAULT_GOVERNOR" in
-                      performance|powersave|userspace|ondemand|interactive|conservative|schedutil) cpu_gov_upper="$(printf '%s' "$CPU_DEFAULT_GOVERNOR" | tr '[:lower:]' '[:upper:]')" ;;
+                      performance|powersave|userspace|ondemand|conservative|schedutil) cpu_gov_upper="$(printf '%s' "$CPU_DEFAULT_GOVERNOR" | tr '[:lower:]' '[:upper:]')" ;;
                       *) echo "::error::Invalid CPU governor selection: $CPU_DEFAULT_GOVERNOR"; exit 1 ;;
                     esac
                     sed -i -E '/^(CONFIG_CPU_FREQ_DEFAULT_GOV_(PERFORMANCE|POWERSAVE|USERSPACE|ONDEMAND|CONSERVATIVE|INTERACTIVE|SCHEDUTIL)=y|# CONFIG_CPU_FREQ_DEFAULT_GOV_(PERFORMANCE|POWERSAVE|USERSPACE|ONDEMAND|CONSERVATIVE|INTERACTIVE|SCHEDUTIL) is not set)$/d' "$config"
@@ -534,7 +533,7 @@ jobs:
                     }
 
                     case "$CPU_DEFAULT_GOVERNOR" in
-                      performance|powersave|userspace|ondemand|interactive|conservative|schedutil) cpu_gov_upper="$(printf '%s' "$CPU_DEFAULT_GOVERNOR" | tr '[:lower:]' '[:upper:]')" ;;
+                      performance|powersave|userspace|ondemand|conservative|schedutil) cpu_gov_upper="$(printf '%s' "$CPU_DEFAULT_GOVERNOR" | tr '[:lower:]' '[:upper:]')" ;;
                       *) echo "::error::Invalid CPU governor selection: $CPU_DEFAULT_GOVERNOR"; exit 1 ;;
                     esac
                     require_config "CONFIG_CPU_FREQ_GOV_$cpu_gov_upper=y"
@@ -894,7 +893,6 @@ jobs:
               "powersave": "POWERSAVE",
               "userspace": "USERSPACE",
               "ondemand": "ONDEMAND",
-              "interactive": "INTERACTIVE",
               "conservative": "CONSERVATIVE",
               "schedutil": "SCHEDUTIL",
           }
@@ -1271,7 +1269,7 @@ jobs:
           }
 
           case "$CPU_DEFAULT_GOVERNOR" in
-            performance|powersave|userspace|ondemand|interactive|conservative|schedutil) cpu_gov_upper="$(printf '%s' "$CPU_DEFAULT_GOVERNOR" | tr '[:lower:]' '[:upper:]')" ;;
+            performance|powersave|userspace|ondemand|conservative|schedutil) cpu_gov_upper="$(printf '%s' "$CPU_DEFAULT_GOVERNOR" | tr '[:lower:]' '[:upper:]')" ;;
             *) echo "::error::Invalid CPU governor selection: $CPU_DEFAULT_GOVERNOR"; exit 1 ;;
           esac
 
