@@ -16,8 +16,8 @@ on:
         default: Clang r416183b
         options:
           - Clang r416183b
-          - Neutron Clang 24.0.0git (06092026)
-          - Neutron Clang 19.0.0
+          - Neutron Clang 24.0.0git
+          - Neutron Clang 19.0.0git
           - Neutron Clang 14.0.0
           - Proton Clang
           - ZyC Clang 12.0.1
@@ -123,9 +123,9 @@ env:
 
   KERNEL_SOURCE: "https://github.com/Kazera62/samsung_M11_sdm450.git"
 
-  CLANG_SOURCE: "${{ inputs.clang_profile == 'Proton Clang' && 'https://github.com/kdrag0n/proton-clang.git' || inputs.clang_profile == 'ZyC Clang 12.0.1' && 'https://github.com/ZyCromerZ/Clang/releases/download/12.0.1-20230207-release/Clang-12.0.1-20230207.tar.gz' || inputs.clang_profile == 'Neutron Clang 14.0.0' && 'https://github.com/tw3akslow/neutron-toolchain.git' || inputs.clang_profile == 'Neutron Clang 24.0.0git (06092026)' && 'https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman' || inputs.clang_profile == 'Neutron Clang 19.0.0' && 'https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman' || 'https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b.git' }}"
+  CLANG_SOURCE: "${{ inputs.clang_profile == 'Proton Clang' && 'https://github.com/kdrag0n/proton-clang.git' || inputs.clang_profile == 'ZyC Clang 12.0.1' && 'https://github.com/ZyCromerZ/Clang/releases/download/12.0.1-20230207-release/Clang-12.0.1-20230207.tar.gz' || inputs.clang_profile == 'Neutron Clang 14.0.0' && 'https://github.com/tw3akslow/neutron-toolchain.git' || inputs.clang_profile == 'Neutron Clang 24.0.0git' && 'https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman' || inputs.clang_profile == 'Neutron Clang 19.0.0git' && 'https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman' || 'https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b.git' }}"
   CLANG_BRANCH: "${{ inputs.clang_profile == 'Proton Clang' && 'master' || inputs.clang_profile == 'Neutron Clang 14.0.0' && 'Neutron-14' || 'lineage-20.0' }}"
-  CLANG_NEUTRON_TAG: "${{ inputs.clang_profile == 'Neutron Clang 24.0.0git (06092026)' && '06092026' || '10032024' }}"
+  CLANG_NEUTRON_TAG: "${{ inputs.clang_profile == 'Neutron Clang 24.0.0git' && '06092026' || '10032024' }}"
 
   GCC_GNU: "false"
   GCC_64_SOURCE: "https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git"
@@ -1065,7 +1065,7 @@ jobs:
           PY
 
       - name: Prepare modern Neutron Clang assembler compatibility
-        if: inputs.clang_profile == 'Neutron Clang 19.0.0' || inputs.clang_profile == 'Neutron Clang 24.0.0git (06092026)'
+        if: inputs.clang_profile == 'Neutron Clang 19.0.0git' || inputs.clang_profile == 'Neutron Clang 24.0.0git'
         shell: bash
         run: |
           set -euo pipefail
