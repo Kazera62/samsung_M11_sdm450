@@ -1431,6 +1431,46 @@ jobs:
           kernel_commit="$(git -C "$source_dir" rev-parse --short=12 HEAD 2>/dev/null || printf '%s' "${GITHUB_SHA:0:12}")"
           build_time="$(date -u '+%Y-%m-%d %H:%M UTC')"
 
+          # Reproduce BakaSU's own version calculation from the checked-out source.
+          # This reports the code and display version that its Kbuild derives at compile time.
+          bakasu_version="N/A"
+          bakasu_version_code="N/A"
+          if [[ "$ROOT_NAME" == "BakaSU + SUSFS" || "$ROOT_NAME" == "BakaSU without SUSFS" ]]; then
+            bakasu_repo="$source_dir/KernelSU"
+            if [[ -f "$bakasu_repo/kernel/Kbuild" && -e "$bakasu_repo/.git" ]]; then
+              bakasu_local_version="$(git -C "$bakasu_repo" rev-list --count HEAD 2>/dev/null || true)"
+              bakasu_commit_sha="$(git -C "$bakasu_repo" rev-parse --short=8 HEAD 2>/dev/null || true)"
+              bakasu_tag_name="$(git -C "$bakasu_repo" describe --abbrev=0 --tags 2>/dev/null || printf 'v4.1.0')"
+              bakasu_branch_name="$(git -C "$bakasu_repo" branch --show-current 2>/dev/null || true)"
+              [[ -n "$bakasu_branch_name" ]] || bakasu_branch_name="unknown"
+
+              if [[ "$bakasu_local_version" =~ ^[0-9]+$ && -n "$bakasu_commit_sha" ]]; then
+                # Matches Kbuild: 30000 + git rev-list --count HEAD + 700.
+                bakasu_version_code=$((30700 + bakasu_local_version))
+                if ! git -C "$bakasu_repo" diff-index --quiet HEAD; then
+                  bakasu_commit_sha="${bakasu_commit_sha}-dirty"
+                fi
+
+                bakasu_format="$(sed -n 's/^CONFIG_KSU_FULL_NAME_FORMAT="\([^"]*\)".*/\1/p' "$source_dir/out/.config" | head -n 1)"
+                [[ -n "$bakasu_format" ]] || bakasu_format="%TAG_NAME%-%COMMIT_SHA%"
+                bakasu_version="${bakasu_format//%TAG_NAME%/$bakasu_tag_name}"
+                bakasu_version="${bakasu_version//%COMMIT_SHA%/$bakasu_commit_sha}"
+                bakasu_version="${bakasu_version//%REPO_NAME%/BakaSU}"
+                bakasu_version="${bakasu_version//%BRANCH_NAME%/$bakasu_branch_name}"
+                bakasu_version="${bakasu_version//%KSU_VERSION%/$bakasu_version_code}"
+                echo "Detected BakaSU version: $bakasu_version (code $bakasu_version_code)"
+              else
+                bakasu_version="Not detected"
+                bakasu_version_code="Not detected"
+                echo "::warning::Could not derive BakaSU version from its checked-out Git metadata."
+              fi
+            else
+              bakasu_version="Not detected"
+              bakasu_version_code="Not detected"
+              echo "::warning::BakaSU Git source was not found at $bakasu_repo; version will be shown as not detected."
+            fi
+          fi
+
           case "$ROOT_NAME" in
             "Non-root")
               root_version="Disabled"
@@ -1462,6 +1502,8 @@ jobs:
             echo "ROOT_VERSION=$root_version"
             echo "MANAGER_SUPPORT=$manager_support"
             echo "SUSFS_SUMMARY=$susfs_summary"
+            echo "BAKASU_VERSION=$bakasu_version"
+            echo "BAKASU_VERSION_CODE=$bakasu_version_code"
           } >> "$GITHUB_ENV"
 
           {
@@ -1479,6 +1521,7 @@ jobs:
             echo "| Clang | $compiler_version |"
             echo "| GCC cross compiler | $gcc_version |"
             echo "| Root | $root_version |"
+            echo "| BakaSU version | $bakasu_version (code $bakasu_version_code) |"
             echo "| Manager support | $manager_support |"
             echo "| SUSFS | $susfs_summary |"
             echo "| Defconfig | $DEFCONFIG_NAME |"
@@ -1518,6 +1561,7 @@ jobs:
           Device: Samsung Galaxy M11/A11
           Kernel: $BUILT_KERNEL_RELEASE
           Root: $ROOT_VERSION
+          BakaSU Version: $BAKASU_VERSION (code $BAKASU_VERSION_CODE)
           Manager Support: $MANAGER_SUPPORT
           SUSFS: $SUSFS_SUMMARY
           Clang: $CLANG_PROFILE
