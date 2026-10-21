@@ -135,11 +135,11 @@ env:
 
   DEFCONFIG_NAME: "a11q_open_defconfig"
 
-  # Use BakaSU through the framework selector and pin its SUSFS-compatible revision.
+  # Follow the latest BakaSU main branch on every build.
   KERNELSU_AUTO_GET: "${{ inputs.root != 'Non-root' && 'true' || 'false' }}"
   KERNELSU_AUTO_FORK: "bakasu"
   KERNELSU_SOURCE: ""
-  KERNELSU_BRANCH: "${{ inputs.root == 'BakaSU + SUSFS' && '5b76b884c75f729a220bb317aa4a4fc78f0e0e9c' || 'main' }}"
+  KERNELSU_BRANCH: "main"
   KERNELSU_METHOD: "shell"
   SUSFS_ENABLE: "${{ inputs.root == 'BakaSU + SUSFS' && 'true' || 'false' }}"
   SUSFS_VERSION: "2.3.0"
@@ -301,9 +301,8 @@ jobs:
           ])
           ready = replace_once(ready, old_config, new_config, "root config step")
 
-          # The framework hardcodes BakaSU to main. Preserve KERNELSU_BRANCH so
-          # SUSFS mode can pin a compatible BakaSU commit while still using the
-          # framework's official bakasu setup path and bundled SUSFS patch.
+          # Keep the framework's BakaSU setup logic aligned with this workflow's
+          # KERNELSU_BRANCH setting so every run follows the latest selected branch.
           expression_prefix = "$" + "{{"
           old_bakasu = "\n".join([
               '            elif [[ "' + expression_prefix + ' env.KERNELSU_AUTO_FORK }}" == "bakasu" ]]; then',
