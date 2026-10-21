@@ -28,6 +28,7 @@ on:
         default: Non-root
         options:
           - Non-root
+          - BakaSU without SUSFS
           - BakaSU + SUSFS
       enable_nethunter:
         description: "Enable NetHunter Wi-Fi injection, HID gadget, and USB Wi-Fi drivers"
@@ -135,7 +136,8 @@ env:
 
   DEFCONFIG_NAME: "a11q_open_defconfig"
 
-  # Use BakaSU through the framework selector and pin its SUSFS-compatible revision.
+  # Use BakaSU through the framework selector. The no-SUSFS choice follows main;
+  # the SUSFS choice retains the revision previously used by the known-working build.
   KERNELSU_AUTO_GET: "${{ inputs.root != 'Non-root' && 'true' || 'false' }}"
   KERNELSU_AUTO_FORK: "bakasu"
   KERNELSU_SOURCE: ""
@@ -1429,27 +1431,27 @@ jobs:
           kernel_commit="$(git -C "$source_dir" rev-parse --short=12 HEAD 2>/dev/null || printf '%s' "${GITHUB_SHA:0:12}")"
           build_time="$(date -u '+%Y-%m-%d %H:%M UTC')"
 
-          if [[ "$ROOT_NAME" == "Non-root" ]]; then
-            root_version="Disabled"
-            manager_support="N/A"
-            susfs_summary="Disabled"
-          else
-            # Derive the displayed root name from the selected workflow option.
-            root_version="${ROOT_NAME% + SUSFS}"
-
-            # Manager support is known for the configured BakaSU integration only.
-            if [[ "$root_version" == "BakaSU" ]]; then
-              manager_support="KernelSU Official, KOWSU, BakaSU"
-            else
-              manager_support="Not specified for $root_version"
-            fi
-
-            if [[ "$SUSFS_ENABLE" == "true" ]]; then
-              susfs_summary="v$SUSFS_VERSION"
-            else
+          case "$ROOT_NAME" in
+            "Non-root")
+              root_version="Disabled"
+              manager_support="N/A"
               susfs_summary="Disabled"
-            fi
-          fi
+              ;;
+            "BakaSU + SUSFS"|"BakaSU without SUSFS")
+              root_version="BakaSU"
+              manager_support="KernelSU Official, KOWSU, BakaSU"
+              if [[ "$SUSFS_ENABLE" == "true" ]]; then
+                susfs_summary="v$SUSFS_VERSION"
+              else
+                susfs_summary="Disabled"
+              fi
+              ;;
+            *)
+              root_version="$ROOT_NAME"
+              manager_support="Not specified for $root_version"
+              susfs_summary="Disabled"
+              ;;
+          esac
 
           {
             echo "BUILT_KERNEL_RELEASE=$kernel_release"
