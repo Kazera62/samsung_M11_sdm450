@@ -135,13 +135,14 @@ env:
 
   DEFCONFIG_NAME: "a11q_open_defconfig"
 
-  # Follow the latest BakaSU main branch on every build.
+  # Use BakaSU through the framework selector and pin its SUSFS-compatible revision.
   KERNELSU_AUTO_GET: "${{ inputs.root != 'Non-root' && 'true' || 'false' }}"
   KERNELSU_AUTO_FORK: "bakasu"
   KERNELSU_SOURCE: ""
-  KERNELSU_BRANCH: "main"
+  KERNELSU_BRANCH: "${{ inputs.root == 'BakaSU + SUSFS' && '5b76b884c75f729a220bb317aa4a4fc78f0e0e9c' || 'main' }}"
   KERNELSU_METHOD: "shell"
   SUSFS_ENABLE: "${{ inputs.root == 'BakaSU + SUSFS' && 'true' || 'false' }}"
+  SUSFS_VERSION: "2.3.0"
   SUSFS_FIXED: "false"
   # Non-empty selector activates the inline Samsung Linux 4.9 compatibility adjustment.
   SUSFS_PATCH_FIXED: "${{ inputs.root == 'BakaSU + SUSFS' && 'inline_samsung_49_compat' || '' }}"
@@ -300,6 +301,29 @@ jobs:
           ])
           ready = replace_once(ready, old_config, new_config, "root config step")
 
+          # The framework hardcodes BakaSU to main. Preserve KERNELSU_BRANCH so
+          # SUSFS mode can pin a compatible BakaSU commit while still using the
+          # framework's official bakasu setup path and bundled SUSFS patch.
+          expression_prefix = "$" + "{{"
+          old_bakasu = "\n".join([
+              '            elif [[ "' + expression_prefix + ' env.KERNELSU_AUTO_FORK }}" == "bakasu" ]]; then',
+              '                KERNELSU_AUTHOR="Baka-SU"',
+              '                KERNELSU_NAME="BakaSU"',
+              '                KERNELSU_ORIGIN_BRANCH="main"',
+              '                if [[ "' + expression_prefix + ' env.SUSFS_ENABLE }}" == "true" ]]; then',
+              '                    KERNELSU_BRANCH="main"',
+              '                else',
+              '                    KERNELSU_BRANCH="main"',
+              '                fi',
+          ])
+          new_bakasu = "\n".join([
+              '            elif [[ "' + expression_prefix + ' env.KERNELSU_AUTO_FORK }}" == "bakasu" ]]; then',
+              '                KERNELSU_AUTHOR="Baka-SU"',
+              '                KERNELSU_NAME="BakaSU"',
+              '                KERNELSU_ORIGIN_BRANCH="main"',
+              '                KERNELSU_BRANCH="${KERNELSU_BRANCH:-main}"',
+          ])
+          ready = replace_once(ready, old_bakasu, new_bakasu, "BakaSU branch selector")
           ready_path.write_text(ready)
 
           # The optional SUSFS hunks below target APIs not present in this Samsung
@@ -1421,16 +1445,7 @@ jobs:
             fi
 
             if [[ "$SUSFS_ENABLE" == "true" ]]; then
-              susfs_header="$source_dir/include/linux/susfs.h"
-              detected_susfs_version=""
-              if [[ -r "$susfs_header" ]]; then
-                detected_susfs_version="$(sed -n -E 's/^[[:space:]]*#define[[:space:]]+SUSFS_VERSION[[:space:]]+"([^"]+)".*/\1/p' "$susfs_header" | head -n 1)"
-              fi
-              if [[ -n "$detected_susfs_version" ]]; then
-                susfs_summary="$detected_susfs_version"
-              else
-                susfs_summary="Enabled (version not detected)"
-              fi
+              susfs_summary="v$SUSFS_VERSION"
             else
               susfs_summary="Disabled"
             fi
