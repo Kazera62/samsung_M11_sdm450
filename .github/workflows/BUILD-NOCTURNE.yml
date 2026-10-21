@@ -35,6 +35,11 @@ on:
         required: true
         type: boolean
         default: false
+      send_zip_to_telegram:
+        description: "Send the kernel ZIP with build report to the Telegram channel"
+        required: true
+        type: boolean
+        default: true
       enable_performance_tuning:
         description: "Disable optional scheduler statistics and CPU frequency switch profiling to reduce instrumentation overhead"
         required: true
@@ -111,6 +116,7 @@ env:
   KERNEL_BRANCH: "${{ github.ref_name }}"
   ROOT_NAME: "${{ inputs.root }}"
   ENABLE_NETHUNTER: "${{ inputs.enable_nethunter && 'true' || 'false' }}"
+  SEND_ZIP_TO_TELEGRAM: "${{ inputs.send_zip_to_telegram && 'true' || 'false' }}"
   ENABLE_PERFORMANCE_TUNING: "${{ inputs.enable_performance_tuning && 'true' || 'false' }}"
   CPU_DEFAULT_GOVERNOR: "${{ inputs.cpu_default_governor }}"
   IO_DEFAULT_SCHEDULER: "${{ inputs.io_default_scheduler }}"
@@ -1553,11 +1559,12 @@ jobs:
             exit 0
           fi
 
-          : "${PACK_NAME:?Packaging did not export PACK_NAME}"
-          zip_path="$GITHUB_WORKSPACE/device_kernel/$PACK_NAME"
-          test -s "$zip_path"
+          if [[ "$SEND_ZIP_TO_TELEGRAM" == "true" ]]; then
+            : "${PACK_NAME:?Packaging did not export PACK_NAME}"
+            zip_path="$GITHUB_WORKSPACE/device_kernel/$PACK_NAME"
+            test -s "$zip_path"
 
-          report=$(cat <<EOF
+              report=$(cat <<EOF
           Kernel: $KERNEL_NAME
           Device: Samsung Galaxy M11/A11
           Kernel: $BUILT_KERNEL_RELEASE
@@ -1569,15 +1576,15 @@ jobs:
           HZ: $CONFIG_HZ_VALUE
           CPU Governor: $CPU_DEFAULT_GOVERNOR
           EOF
-          )
+            )
 
-          document_response="$(curl --fail-with-body --silent --show-error --retry 2 --max-time 300 \
-            --request POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
-            --form-string "chat_id=${TELEGRAM_CHANNEL_ID}" \
-            --form-string "caption=$report" \
-            --form "document=@${zip_path};type=application/zip")"
+              document_response="$(curl --fail-with-body --silent --show-error --retry 2 --max-time 300 \
+              --request POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+              --form-string "chat_id=${TELEGRAM_CHANNEL_ID}" \
+              --form-string "caption=$report" \
+              --form "document=@${zip_path};type=application/zip")"
 
-          printf '%s' "$document_response" | python3 -c '
+            printf '%s' "$document_response" | python3 -c '
           import json, sys
           data = json.load(sys.stdin)
           if not data.get("ok"):
@@ -1585,6 +1592,10 @@ jobs:
               sys.exit(1)
           print("Telegram accepted the kernel ZIP with build report caption.")
           '
+
+          else
+            echo "Telegram kernel ZIP/report skipped because SEND_ZIP_TO_TELEGRAM=false."
+          fi
 
           # Send a separate NetHunter notification only when the workflow toggle is enabled.
           if [[ "$ENABLE_NETHUNTER" == "true" ]]; then
