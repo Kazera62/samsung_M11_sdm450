@@ -127,7 +127,7 @@ env:
 
   # Required for this kernel's Samsung DTB and overlay generation.
   CUSTOM_CMDS: "CLANG_TRIPLE=aarch64-linux-gnu-"
-  EXTRA_CMDS: "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/clang-custom/lib64 DTC_EXT=$GITHUB_WORKSPACE/device_kernel/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y LOCALVERSION=-$KERNEL_NAME${{ inputs.enable_nethunter && '-NH' || '' }}"
+  EXTRA_CMDS: "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/clang-custom/lib64 DTC_EXT=$GITHUB_WORKSPACE/device_kernel/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y LOCALVERSION=-$KERNEL_NAME${{ inputs.enable_nethunter && '-NH' || '' }} ${{ inputs.clang_profile == 'ZyC Clang 14.0.6 (20261011)' && 'KCFLAGS=-gdwarf-4' || '' }}"
 
   KERNEL_SOURCE: "https://github.com/Kazera62/samsung_M11_sdm450.git"
 
