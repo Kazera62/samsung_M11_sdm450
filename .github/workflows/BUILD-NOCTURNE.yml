@@ -142,7 +142,6 @@ env:
   KERNELSU_BRANCH: "main"
   KERNELSU_METHOD: "shell"
   SUSFS_ENABLE: "${{ inputs.root == 'BakaSU + SUSFS' && 'true' || 'false' }}"
-  SUSFS_VERSION: "2.3.0"
   SUSFS_FIXED: "false"
   # Non-empty selector activates the inline Samsung Linux 4.9 compatibility adjustment.
   SUSFS_PATCH_FIXED: "${{ inputs.root == 'BakaSU + SUSFS' && 'inline_samsung_49_compat' || '' }}"
@@ -1422,7 +1421,16 @@ jobs:
             fi
 
             if [[ "$SUSFS_ENABLE" == "true" ]]; then
-              susfs_summary="v$SUSFS_VERSION"
+              susfs_header="$source_dir/include/linux/susfs.h"
+              detected_susfs_version=""
+              if [[ -r "$susfs_header" ]]; then
+                detected_susfs_version="$(sed -n -E 's/^[[:space:]]*#define[[:space:]]+SUSFS_VERSION[[:space:]]+"([^"]+)".*/\1/p' "$susfs_header" | head -n 1)"
+              fi
+              if [[ -n "$detected_susfs_version" ]]; then
+                susfs_summary="$detected_susfs_version"
+              else
+                susfs_summary="Enabled (version not detected)"
+              fi
             else
               susfs_summary="Disabled"
             fi
