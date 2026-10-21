@@ -1542,13 +1542,14 @@ jobs:
         shell: bash
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # Set this GitHub Actions secret to @public_channel or the channel ID (-100...).
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
           CLANG_PROFILE: ${{ inputs.clang_profile }}
         run: |
           set -euo pipefail
 
-          if [[ -z "${TELEGRAM_BOT_TOKEN:-}" || -z "${TELEGRAM_CHAT_ID:-}" ]]; then
-            echo "::notice::Telegram secrets are not configured; the GitHub Actions artifact is available instead."
+          if [[ -z "${TELEGRAM_BOT_TOKEN:-}" || -z "${TELEGRAM_CHANNEL_ID:-}" ]]; then
+            echo "::notice::Telegram bot token or channel destination is not configured; the GitHub Actions artifact is available instead."
             exit 0
           fi
 
@@ -1572,7 +1573,7 @@ jobs:
 
           document_response="$(curl --fail-with-body --silent --show-error --retry 2 --max-time 300 \
             --request POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
-            --form-string "chat_id=${TELEGRAM_CHAT_ID}" \
+            --form-string "chat_id=${TELEGRAM_CHANNEL_ID}" \
             --form-string "caption=$report" \
             --form "document=@${zip_path};type=application/zip")"
 
@@ -1595,7 +1596,7 @@ jobs:
 
             nethunter_response="$(curl --fail-with-body --silent --show-error --retry 2 --max-time 30 \
               --request POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-              --form-string "chat_id=${TELEGRAM_CHAT_ID}" \
+              --form-string "chat_id=${TELEGRAM_CHANNEL_ID}" \
               --form-string "text=$nethunter_message")"
 
             printf '%s' "$nethunter_response" | python3 -c '
