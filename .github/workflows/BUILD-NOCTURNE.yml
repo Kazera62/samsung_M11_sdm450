@@ -19,9 +19,9 @@ on:
           - Neutron Clang 24.0.0git
           - Neutron Clang 19.0.0git
           - Neutron Clang 14.0.0
-          - Proton Clang
-          - ZyC Clang 12.0.1
           - ZyC Clang 14.0.6
+          - ZyC Clang 12.0.1
+          - Proton Clang
       root:
         description: "Root implementation"
         required: true
