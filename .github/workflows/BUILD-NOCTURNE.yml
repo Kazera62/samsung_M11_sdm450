@@ -1,0 +1,1624 @@
+name: NOCTURNE SDM450 Build
+run-name: "${{ inputs.kernel_name }} | ${{ inputs.clang_profile }} | ${{ inputs.root }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernel_name:
+        description: "Custom kernel name"
+        required: true
+        type: string
+        default: NOCTURNE
+      clang_profile:
+        description: "Compiler toolchain for this Linux 4.9 kernel"
+        required: true
+        type: choice
+        default: Clang r416183b
+        options:
+          - Clang r416183b
+          - Neutron Clang 24.0.0git
+          - Neutron Clang 19.0.0git
+          - Neutron Clang 14.0.0
+          - ZyC Clang 14.0.6
+          - ZyC Clang 12.0.1
+          - Proton Clang
+      root:
+        description: "Root implementation"
+        required: true
+        type: choice
+        default: Non-root
+        options:
+          - Non-root
+          - BakaSU without SUSFS
+          - BakaSU + SUSFS
+      enable_nethunter:
+        description: "Enable NetHunter Wi-Fi injection, HID gadget, and USB Wi-Fi drivers"
+        required: true
+        type: boolean
+        default: false
+      send_zip_to_telegram:
+        description: "Send the kernel ZIP with build report to the Telegram channel"
+        required: true
+        type: boolean
+        default: true
+      enable_performance_tuning:
+        description: "Disable optional scheduler statistics and CPU frequency switch profiling to reduce instrumentation overhead"
+        required: true
+        type: boolean
+        default: false
+      cpu_default_governor:
+        description: "Default CPU governor"
+        required: true
+        type: choice
+        default: performance
+        options:
+          - performance
+          - schedutil
+          - ondemand
+          - conservative
+          - userspace
+          - powersave
+      io_default_scheduler:
+        description: "Block I/O scheduler: flash-oriented low overhead first; noop is the default"
+        required: true
+        type: choice
+        default: noop
+        options:
+          - noop
+          - deadline
+          - cfq
+      compression_algorithm:
+        description: "zRAM compressor: speed-first order; lz4 is the default"
+        required: true
+        type: choice
+        default: lz4
+        options:
+          - lz4
+          - lzo
+          - zstd
+          - lz4hc
+      tcp_default_congestion:
+        description: "TCP congestion control: general-purpose performance first; BBR is the default (best choice varies by network)"
+        required: true
+        type: choice
+        default: bbr
+        options:
+          - bbr
+          - cubic
+          - westwood
+          - htcp
+          - hybla
+          - veno
+          - vegas
+          - cdg
+          - dctcp
+          - bic
+          - reno
+      config_hz:
+        description: "Kernel timer tick rate (CONFIG_HZ)"
+        required: true
+        type: choice
+        default: "1000"
+        options:
+          - "100"
+          - "250"
+          - "300"
+          - "1000"
+
+permissions:
+  contents: read
+
+env:
+  DEVICE_NAME: "samsung_m11"
+  DEVICE_CODENAME: "m11q"
+
+  KERNEL_NAME: "${{ inputs.kernel_name }}"
+  # The workflow's selected Git ref is also the kernel source branch.
+  KERNEL_BRANCH: "${{ github.ref_name }}"
+  ROOT_NAME: "${{ inputs.root }}"
+  ENABLE_NETHUNTER: "${{ inputs.enable_nethunter && 'true' || 'false' }}"
+  SEND_ZIP_TO_TELEGRAM: "${{ inputs.send_zip_to_telegram && 'true' || 'false' }}"
+  ENABLE_PERFORMANCE_TUNING: "${{ inputs.enable_performance_tuning && 'true' || 'false' }}"
+  CPU_DEFAULT_GOVERNOR: "${{ inputs.cpu_default_governor }}"
+  IO_DEFAULT_SCHEDULER: "${{ inputs.io_default_scheduler }}"
+  ZRAM_COMPRESSION: "${{ inputs.compression_algorithm }}"
+  TCP_DEFAULT_CONGESTION: "${{ inputs.tcp_default_congestion }}"
+  CONFIG_HZ_VALUE: "${{ inputs.config_hz }}"
+
+  # Required for this kernel's Samsung DTB and overlay generation.
+  CUSTOM_CMDS: "CLANG_TRIPLE=aarch64-linux-gnu-"
+  EXTRA_CMDS: "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/clang-custom/lib64 DTC_EXT=$GITHUB_WORKSPACE/device_kernel/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y LOCALVERSION=-$KERNEL_NAME${{ inputs.enable_nethunter && '-NH' || '' }} ${{ inputs.clang_profile == 'ZyC Clang 14.0.6' && 'KCFLAGS=-gdwarf-4' || '' }}"
+
+  KERNEL_SOURCE: "https://github.com/Kazera62/samsung_M11_sdm450.git"
+
+  CLANG_SOURCE: "${{ inputs.clang_profile == 'Proton Clang' && 'https://github.com/kdrag0n/proton-clang.git' || inputs.clang_profile == 'ZyC Clang 14.0.6' && 'https://github.com/ZyCromerZ/Clang/releases/download/14.0.6-20261011-release/Clang-14.0.6-20261011.tar.gz' || inputs.clang_profile == 'ZyC Clang 12.0.1' && 'https://github.com/ZyCromerZ/Clang/releases/download/12.0.1-20230207-release/Clang-12.0.1-20230207.tar.gz' || inputs.clang_profile == 'Neutron Clang 14.0.0' && 'https://github.com/tw3akslow/neutron-toolchain.git' || inputs.clang_profile == 'Neutron Clang 24.0.0git' && 'https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman' || inputs.clang_profile == 'Neutron Clang 19.0.0git' && 'https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman' || 'https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b.git' }}"
+  CLANG_BRANCH: "${{ inputs.clang_profile == 'Proton Clang' && 'master' || inputs.clang_profile == 'Neutron Clang 14.0.0' && 'Neutron-14' || 'lineage-20.0' }}"
+  CLANG_NEUTRON_TAG: "${{ inputs.clang_profile == 'Neutron Clang 24.0.0git' && '06092026' || '10032024' }}"
+
+  GCC_GNU: "false"
+  GCC_64_SOURCE: "https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git"
+  GCC_64_BRANCH: "lineage-19.1"
+  GCC_32_SOURCE: "https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9.git"
+  GCC_32_BRANCH: "lineage-19.1"
+
+  DEFCONFIG_NAME: "a11q_open_defconfig"
+
+  # Use BakaSU through the framework selector. The no-SUSFS choice follows main;
+  # the SUSFS choice retains the revision previously used by the known-working build.
+  KERNELSU_AUTO_GET: "${{ inputs.root != 'Non-root' && 'true' || 'false' }}"
+  KERNELSU_AUTO_FORK: "bakasu"
+  KERNELSU_SOURCE: ""
+  KERNELSU_BRANCH: "${{ inputs.root == 'BakaSU + SUSFS' && '5b76b884c75f729a220bb317aa4a4fc78f0e0e9c' || 'main' }}"
+  KERNELSU_METHOD: "shell"
+  SUSFS_ENABLE: "${{ inputs.root == 'BakaSU + SUSFS' && 'true' || 'false' }}"
+  SUSFS_VERSION: "2.3.0"
+  SUSFS_FIXED: "false"
+  # Non-empty selector activates the inline Samsung Linux 4.9 compatibility adjustment.
+  SUSFS_PATCH_FIXED: "${{ inputs.root == 'BakaSU + SUSFS' && 'inline_samsung_49_compat' || '' }}"
+
+  # Always use the user's own AnyKernel3 repository.
+  AK3_SOURCE: "https://github.com/Kazera62/AnyKernel3.git"
+  AK3_BRANCH: "master"
+  PACK_METHOD: "AnyKernel3"
+  PACK_KMODULES: "false"
+  ROM_TEXT: "${{ inputs.kernel_name }}"
+  PYTHON_VERSION: "3"
+  HOOK_METHOD: "syscall"
+
+  BUILD_DEBUGGER: "true"
+  FREE_MORE_SPACE: "true"
+
+jobs:
+  build:
+    name: Samsung Galaxy M11 / A11 (SDM450)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_HARDLINK: "true"
+
+    steps:
+      - name: Validate build inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$KERNEL_NAME" =~ ^[A-Za-z0-9._-]{1,32}$ ]]; then
+            echo "::error::Kernel name must be 1-32 characters: letters, digits, dot, underscore, or hyphen."
+            exit 1
+          fi
+          if ! git check-ref-format --branch "$KERNEL_BRANCH" >/dev/null 2>&1; then
+            echo "::error::The selected workflow ref is not a valid kernel branch: $KERNEL_BRANCH"
+            exit 1
+          fi
+          printf 'Kernel: %s\nBranch: %s\nRoot: %s\n' \
+            "$KERNEL_NAME" "$KERNEL_BRANCH" "$ROOT_NAME"
+
+      - name: Checkout NonGKI build framework
+        uses: actions/checkout@v6
+        with:
+          repository: JackA1ltman/NonGKI_Kernel_Build_2nd
+          # Follow upstream mainline so framework updates are used on each run.
+          ref: mainline
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Tune upstream actions for this kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          def replace_once(source, old, new, label):
+              count = source.count(old)
+              if count != 1:
+                  raise SystemExit(f"Expected exactly one {label}, found {count}.")
+              return source.replace(old, new, 1)
+
+          ready_path = Path(".github/workflows/build-ready/action.yml")
+          ready = ready_path.read_text()
+
+          # Apply NetHunter before framework hook/root patching can alter shared source files.
+          if "name: Apply NetHunter Wi-Fi injection patch (Linux 4.9)" not in ready:
+              nethunter_step = r'''      - name: Apply NetHunter Wi-Fi injection patch (Linux 4.9)
+                  if: env.ENABLE_NETHUNTER == 'true'
+                  shell: bash
+                  run: |
+                    set -euo pipefail
+                    cd "$GITHUB_WORKSPACE/device_kernel"
+                    patch_file="patches/nethunter/kali-wifi-injection-4.9.patch"
+          
+                    test -s "$patch_file" || {
+                      echo "::error::NetHunter is enabled, but $patch_file is missing."
+                      exit 1
+                    }
+          
+                    if git apply --check "$patch_file"; then
+                      git apply "$patch_file"
+                      echo "Applied source-matched Kali Linux 4.9 Wi-Fi injection patch."
+                    elif git apply --reverse --check "$patch_file"; then
+                      echo "NetHunter Wi-Fi injection patch is already applied; skipping."
+                    else
+                      echo "::error::The NetHunter Wi-Fi injection patch does not match this source revision."
+                      echo "::error::Patch was not forced; inspect the failed hunk before continuing."
+                      exit 1
+                    fi
+
+                    hid_patch_file="patches/nethunter/usb-hidg-linux-4.9.patch"
+                    test -s "$hid_patch_file" || {
+                      echo "::error::NetHunter is enabled, but $hid_patch_file is missing."
+                      exit 1
+                    }
+                    if git apply --check "$hid_patch_file"; then
+                      git apply "$hid_patch_file"
+                      echo "Applied Linux 4.9 HID gadget diagnostics patch."
+                    elif git apply --reverse --check "$hid_patch_file"; then
+                      echo "HID gadget diagnostics patch is already applied; skipping."
+                    else
+                      echo "::error::The HID gadget patch does not match this Linux 4.9 source."
+                      echo "::error::Patch was not forced; inspect the failed hunk before continuing."
+                      exit 1
+                    fi
+          '''
+              marker = "      - name: Get Kernel Arch\n"
+              if ready.count(marker) != 1:
+                  raise SystemExit("Expected exactly one Get Kernel Arch step when inserting NetHunter patch.")
+              ready = ready.replace(marker, nethunter_step + "\n" + marker, 1)
+
+          # Rootless builds must not install KernelSU.
+          old_ksu = "\n".join([
+              "      - name: Set KernelSU",
+              "        shell: bash",
+              "",
+          ])
+          new_ksu = "\n".join([
+              "      - name: Set KernelSU",
+              "        if: env.ROOT_NAME != 'Non-root'",
+              "        shell: bash",
+              "",
+          ])
+          ready = replace_once(ready, old_ksu, new_ksu, "KernelSU setup step")
+
+          # The upstream SukiSU patch step enters drivers/kernelsu, which does not
+          # exist for Non-root. Keep the upstream step, but skip it for Non-root.
+          old_suki = "\n".join([
+              "      - name: SukiSU-Ultra Fixed",
+              "        shell: bash",
+              "",
+          ])
+          new_suki = "\n".join([
+              "      - name: SukiSU-Ultra Fixed",
+              "        if: env.ROOT_NAME != 'Non-root'",
+              "        shell: bash",
+              "",
+          ])
+          ready = replace_once(ready, old_suki, new_suki, "upstream SukiSU fixed step")
+
+          # Do not append KSU configuration for Non-root builds.
+          old_config = "\n".join([
+              "      - name: Set KSU and SUSFS for DEFCONFIG",
+              "        shell: bash",
+              "",
+          ])
+          new_config = "\n".join([
+              "      - name: Set KSU and SUSFS for DEFCONFIG",
+              "        if: env.ROOT_NAME != 'Non-root'",
+              "        shell: bash",
+              "",
+          ])
+          ready = replace_once(ready, old_config, new_config, "root config step")
+
+          # The framework hardcodes BakaSU to main. Preserve KERNELSU_BRANCH so
+          # SUSFS mode can pin a compatible BakaSU commit while still using the
+          # framework's official bakasu setup path and bundled SUSFS patch.
+          expression_prefix = "$" + "{{"
+          old_bakasu = "\n".join([
+              '            elif [[ "' + expression_prefix + ' env.KERNELSU_AUTO_FORK }}" == "bakasu" ]]; then',
+              '                KERNELSU_AUTHOR="Baka-SU"',
+              '                KERNELSU_NAME="BakaSU"',
+              '                KERNELSU_ORIGIN_BRANCH="main"',
+              '                if [[ "' + expression_prefix + ' env.SUSFS_ENABLE }}" == "true" ]]; then',
+              '                    KERNELSU_BRANCH="main"',
+              '                else',
+              '                    KERNELSU_BRANCH="main"',
+              '                fi',
+          ])
+          new_bakasu = "\n".join([
+              '            elif [[ "' + expression_prefix + ' env.KERNELSU_AUTO_FORK }}" == "bakasu" ]]; then',
+              '                KERNELSU_AUTHOR="Baka-SU"',
+              '                KERNELSU_NAME="BakaSU"',
+              '                KERNELSU_ORIGIN_BRANCH="main"',
+              '                KERNELSU_BRANCH="${KERNELSU_BRANCH:-main}"',
+          ])
+          ready = replace_once(ready, old_bakasu, new_bakasu, "BakaSU branch selector")
+          ready_path.write_text(ready)
+
+          # The optional SUSFS hunks below target APIs not present in this Samsung
+          # Linux 4.9 tree. Retain the core path/mount feature set for this build.
+          susfs_action_path = Path(".github/workflows/patch-susfs/action.yml")
+          susfs_action = susfs_action_path.read_text()
+          for feature in (
+              "SUS_KSTAT",
+              "SPOOF_CMDLINE_OR_BOOTCONFIG",
+              "OPEN_REDIRECT",
+              "SUS_MAP",
+          ):
+              pattern = re.compile(
+                  rf'(?m)^ *echo "CONFIG_KSU_SUSFS_{feature}=y" >> .*$'
+              )
+              susfs_action, count = pattern.subn("", susfs_action)
+              if count != 1:
+                  raise SystemExit(
+                      f"Expected one optional SUSFS config line for {feature}, found {count}."
+                  )
+
+          # Embed the Samsung 4.9 compatibility hunk in this workflow instead
+          # of adding a separate patch directory to the kernel source.
+          fixed_start = susfs_action.find("      - name: SUSFS Patch Fixed")
+          upload_start = susfs_action.find("      - name: Upload Build Patch Rejected Files", fixed_start)
+          if fixed_start < 0 or upload_start < 0:
+              raise SystemExit("Could not locate the framework SUSFS fixed-patch step.")
+
+          inline_fixed_step = r'''      - name: SUSFS Patch Fixed
+                  if: env.SUSFS_ENABLE == 'true' && env.SUSFS_SKIP != 'true'
+                  shell: bash
+                  run: |
+                    set -euo pipefail
+                    cd "$GITHUB_WORKSPACE/device_kernel"
+          
+                    if [[ "$SUSFS_PATCH_FIXED" != "inline_samsung_49_compat" ]]; then
+                      echo "::error::Unexpected SUSFS compatibility selector."
+                      exit 1
+                    fi
+          
+                    python3 - <<'PY'
+                    from pathlib import Path
+          
+                    path = Path("fs/namespace.c")
+                    source = path.read_text()
+          
+                    header_block = """#ifdef CONFIG_KSU_SUSFS
+                    #include <linux/susfs_def.h>
+                    #endif // #ifdef CONFIG_KSU_SUSFS
+                    """
+                    header_marker = "#include <linux/fslog.h>\n"
+                    if "#include <linux/susfs_def.h>" not in source:
+                        if source.count(header_marker) != 1:
+                            raise SystemExit("Cannot locate the Samsung fslog include for SUSFS compatibility.")
+                        source = source.replace(header_marker, header_block + header_marker, 1)
+          
+                    mount_block = """#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+                    extern bool susfs_is_current_ksu_domain(void);
+                    extern struct static_key_true susfs_is_sdcard_android_data_not_decrypted;
+                    
+                    #define CL_COPY_MNT_NS BIT(25) /* used by copy_mnt_ns() */
+                    
+                    #endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+                    """
+                    if "CL_COPY_MNT_NS BIT(25)" not in source:
+                        anchor = '#include "internal.h"\n'
+                        if source.count(anchor) != 1:
+                            raise SystemExit("Cannot locate the namespace include anchor for SUSFS compatibility.")
+                        source = source.replace(anchor, anchor + "\n" + mount_block, 1)
+          
+                    for required in (
+                        "#include <linux/susfs_def.h>",
+                        "susfs_is_current_ksu_domain",
+                        "susfs_is_sdcard_android_data_not_decrypted",
+                        "CL_COPY_MNT_NS BIT(25)",
+                    ):
+                        if required not in source:
+                            raise SystemExit(f"SUSFS compatibility adjustment missing: {required}")
+          
+                    path.write_text(source)
+                    print("Applied inline Samsung Linux 4.9 SUSFS namespace compatibility.")
+                    PY
+          
+          '''
+          # Keep rejected-hunk diagnostics in the build log, but do not publish a
+          # separate patch_rejected_files artifact. The kernel ZIP is the only
+          # artifact intended for normal successful builds.
+          susfs_action = susfs_action[:fixed_start] + inline_fixed_step
+          susfs_action_path.write_text(susfs_action)
+          # Keep runner setup lighter: skip optional package purging and compilation
+          # of Coccinelle, which is not used by this build path.
+          env_path = Path(".github/workflows/build-env/action.yml")
+          env_text = env_path.read_text()
+          clang_expr = "$" + "{{"
+          old_clang_selector = (
+              'if [[ "' + clang_expr + ' env.CLANG_SOURCE }}" == *proton* ]]; then\n'
+              '            echo "[+] Detected Proton Clang. Automatically Configure GCC."\n'
+              '            echo "GCC_64=CROSS_COMPILE=aarch64-linux-gnu-" >> $GITHUB_ENV\n'
+              '            echo "GCC_32=CROSS_COMPILE_ARM32=arm-linux-gnueabi-" >> $GITHUB_ENV'
+          )
+          new_clang_selector = (
+              'if [[ "' + clang_expr + ' env.CLANG_SOURCE }}" == *proton* ]] || '
+              '[[ "' + clang_expr + ' env.CLANG_SOURCE }}" == *tw3akslow/neutron-toolchain* ]]; then\n'
+              '            echo "[+] Detected standalone kernel Clang toolchain; using bundled GNU binutils."\n'
+              '            echo "GCC_64=CROSS_COMPILE=aarch64-linux-gnu-" >> $GITHUB_ENV\n'
+              '            echo "GCC_32=CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/gcc-32/bin/arm-linux-androideabi-" >> $GITHUB_ENV'
+          )
+          env_text = replace_once(
+              env_text,
+              old_clang_selector,
+              new_clang_selector,
+              "standalone kernel Clang selector",
+          )
+          env_text = replace_once(
+              env_text,
+              "bash antman -S=10032024",
+              'bash antman -S="$CLANG_NEUTRON_TAG"',
+              "Neutron Clang AntMan release selector",
+          )
+          env_text = replace_once(
+              env_text,
+              "large-packages: true",
+              "large-packages: false",
+              "large package cleanup option",
+          )
+
+          expression_prefix = "$" + "{{"
+          newer_marker = 'elif [ "' + expression_prefix + ' env.SYSTEM_VERSION }}" == "newer" ]; then'
+          arch_marker = 'elif [ "' + expression_prefix + ' env.SYSTEM_VERSION }}" == "arch" ]; then'
+          section_start = env_text.index(newer_marker)
+          section_end = env_text.index(arch_marker, section_start)
+          newer_section = env_text[section_start:section_end]
+          coccinelle_start = newer_section.index("            # Install Coccinelle\n")
+          coccinelle_end = newer_section.index("            # Install Libtinfo5\n", coccinelle_start)
+          newer_section = (
+              newer_section[:coccinelle_start]
+              + "            # Coccinelle is not used by this kernel build path; skip building it.\n\n"
+              + newer_section[coccinelle_end:]
+          )
+          env_text = env_text[:section_start] + newer_section + env_text[section_end:]
+          env_path.write_text(env_text)
+          process_path = Path(".github/workflows/build-process/action.yml")
+          process = process_path.read_text()
+          config_validation_marker = "          # KPM Detect\n"
+          config_validation_hook = r'''          # Validate the final Kconfig output before any kernel compilation.
+                    config="$GITHUB_WORKSPACE/device_kernel/out/.config"
+                    if [[ ! -s "$config" ]]; then
+                      echo "::error::Final kernel .config was not generated; refusing to compile."
+                      exit 1
+                    fi
+
+                    # Optional Kali NetHunter kernel features.
+                    test -x ./scripts/config || {
+                      echo "::error::scripts/config is missing from the kernel source."
+                      exit 1
+                    }
+
+                    # Keep the compiled configuration embedded in every kernel image so
+                    # post-build validation works even when NetHunter is disabled.
+                    for symbol in IKCONFIG IKCONFIG_PROC; do
+                      ./scripts/config --file "$config" --enable "$symbol"
+                    done
+
+                    if [[ "${ENABLE_NETHUNTER:-false}" == "true" ]]; then
+                      for symbol in \
+                        CFG80211 MAC80211 MAC80211_RC_MINSTREL MAC80211_RC_MINSTREL_HT \
+                        CFG80211_INTERNAL_REGDB USB_GADGET USB_CONFIGFS \
+                        USB_CONFIGFS_F_HID USB_F_HID USB_CONFIGFS_MASS_STORAGE USB_G_ANDROID \
+                        IKCONFIG IKCONFIG_PROC \
+                        WLAN_VENDOR_ATH ATH9K_HTC \
+                        WLAN_VENDOR_REALTEK RTL_CARDS RTL8187 RTL8192CU \
+                        WLAN_VENDOR_RALINK RT2X00 RT2800USB; do
+                        ./scripts/config --file "$config" --enable "$symbol"
+                      done
+                      echo "NetHunter enabled: injection patch, mac80211, HID configfs, and USB Wi-Fi drivers requested."
+                    else
+                      # Keep Android's required USB gadget/configfs functions intact.
+                      # Disable the optional NetHunter wireless/injection stack and HID function.
+                      for symbol in \
+                        MAC80211 MAC80211_RC_MINSTREL MAC80211_RC_MINSTREL_HT \
+                        USB_CONFIGFS_F_HID USB_F_HID \
+                        WLAN_VENDOR_ATH ATH9K_HTC \
+                        WLAN_VENDOR_REALTEK RTL_CARDS RTL8187 RTL8192CU \
+                        WLAN_VENDOR_RALINK RT2X00 RT2800USB; do
+                        ./scripts/config --file "$config" --disable "$symbol"
+                      done
+                      echo "NetHunter disabled: optional mac80211, injection-related USB HID, and external USB Wi-Fi drivers disabled; Android USB gadget retained."
+                    fi
+
+                    # Re-apply CPU governor and timer choices to the final output config
+                    # after defconfig and any optional config merges.
+                    case "$CPU_DEFAULT_GOVERNOR" in
+                      performance|powersave|userspace|ondemand|conservative|schedutil) cpu_gov_upper="$(printf '%s' "$CPU_DEFAULT_GOVERNOR" | tr '[:lower:]' '[:upper:]')" ;;
+                      *) echo "::error::Invalid CPU governor selection: $CPU_DEFAULT_GOVERNOR"; exit 1 ;;
+                    esac
+                    sed -i -E '/^(CONFIG_CPU_FREQ_DEFAULT_GOV_(PERFORMANCE|POWERSAVE|USERSPACE|ONDEMAND|CONSERVATIVE|INTERACTIVE|SCHEDUTIL)=y|# CONFIG_CPU_FREQ_DEFAULT_GOV_(PERFORMANCE|POWERSAVE|USERSPACE|ONDEMAND|CONSERVATIVE|INTERACTIVE|SCHEDUTIL) is not set)$/d' "$config"
+                    printf 'CONFIG_CPU_FREQ_DEFAULT_GOV_%s=y\n' "$cpu_gov_upper" >> "$config"
+
+                    case "$CONFIG_HZ_VALUE" in
+                      100|250|300|1000) ;;
+                      *) echo "::error::Invalid CONFIG_HZ selection: $CONFIG_HZ_VALUE"; exit 1 ;;
+                    esac
+                    sed -i -E '/^(CONFIG_HZ_(100|250|300|1000)=y|# CONFIG_HZ_(100|250|300|1000) is not set|CONFIG_HZ=[0-9]+)$/d' "$config"
+                    printf 'CONFIG_HZ_%s=y\n' "$CONFIG_HZ_VALUE" >> "$config"
+
+                    # Recalculate derived CONFIG_HZ and normalize Kconfig selections.
+                    make CC="ccache clang" CLANG_TRIPLE=aarch64-linux-gnu- LD_LIBRARY_PATH="$GITHUB_WORKSPACE/clang-custom/lib64" DTC_EXT="$GITHUB_WORKSPACE/device_kernel/tools/dtc" CONFIG_BUILD_ARM64_DT_OVERLAY=y LOCALVERSION="-$KERNEL_NAME" O=out ARCH=arm64 olddefconfig
+
+                    config="$GITHUB_WORKSPACE/device_kernel/out/.config"
+                    require_config() {
+                      if ! grep -Fqx -- "$1" "$config"; then
+                        echo "::error::Kconfig rejected selected option: $1"
+                        exit 1
+                      fi
+                    }
+
+                    case "$CPU_DEFAULT_GOVERNOR" in
+                      performance|powersave|userspace|ondemand|conservative|schedutil) cpu_gov_upper="$(printf '%s' "$CPU_DEFAULT_GOVERNOR" | tr '[:lower:]' '[:upper:]')" ;;
+                      *) echo "::error::Invalid CPU governor selection: $CPU_DEFAULT_GOVERNOR"; exit 1 ;;
+                    esac
+                    require_config "CONFIG_CPU_FREQ_GOV_$cpu_gov_upper=y"
+                    require_config "CONFIG_CPU_FREQ_DEFAULT_GOV_$cpu_gov_upper=y"
+                    cpu_gov_count="$(grep -Ec '^CONFIG_CPU_FREQ_DEFAULT_GOV_[A-Z0-9_]+=y$' "$config" || true)"
+                    if [[ "$cpu_gov_count" != "1" ]]; then
+                      echo "::error::Expected exactly one enabled default CPU governor, found $cpu_gov_count."
+                      exit 1
+                    fi
+
+                    case "$IO_DEFAULT_SCHEDULER" in
+                      cfq|noop|deadline) io_upper="$(printf '%s' "$IO_DEFAULT_SCHEDULER" | tr '[:lower:]' '[:upper:]')" ;;
+                      *) echo "::error::Invalid I/O scheduler selection: $IO_DEFAULT_SCHEDULER"; exit 1 ;;
+                    esac
+                    require_config "CONFIG_IOSCHED_$io_upper=y"
+                    require_config "CONFIG_DEFAULT_$io_upper=y"
+                    require_config "CONFIG_DEFAULT_IOSCHED=\"$IO_DEFAULT_SCHEDULER\""
+                    io_count="$(grep -Ec '^CONFIG_DEFAULT_(DEADLINE|CFQ|NOOP)=y$' "$config" || true)"
+                    if [[ "$io_count" != "1" ]]; then
+                      echo "::error::Expected exactly one default I/O scheduler, found $io_count."
+                      exit 1
+                    fi
+
+                    case "$TCP_DEFAULT_CONGESTION" in
+                      bic|cubic|htcp|hybla|vegas|veno|westwood|dctcp|cdg|bbr|reno) tcp_lower="$TCP_DEFAULT_CONGESTION"; tcp_upper="$(printf '%s' "$tcp_lower" | tr '[:lower:]' '[:upper:]')" ;;
+                      *) echo "::error::Invalid TCP congestion selection: $TCP_DEFAULT_CONGESTION"; exit 1 ;;
+                    esac
+                    if [[ "$tcp_lower" != "reno" ]]; then
+                      require_config "CONFIG_TCP_CONG_$tcp_upper=y"
+                    fi
+                    require_config "CONFIG_DEFAULT_$tcp_upper=y"
+                    require_config "CONFIG_DEFAULT_TCP_CONG=\"$tcp_lower\""
+                    tcp_count="$(grep -Ec '^CONFIG_DEFAULT_(BIC|CUBIC|HTCP|HYBLA|VEGAS|VENO|WESTWOOD|DCTCP|CDG|BBR|RENO)=y$' "$config" || true)"
+                    if [[ "$tcp_count" != "1" ]]; then
+                      echo "::error::Expected exactly one default TCP congestion algorithm, found $tcp_count."
+                      exit 1
+                    fi
+
+                    case "$CONFIG_HZ_VALUE" in
+                      100|250|300|1000) ;;
+                      *) echo "::error::Invalid CONFIG_HZ selection: $CONFIG_HZ_VALUE"; exit 1 ;;
+                    esac
+                    require_config "CONFIG_HZ_$CONFIG_HZ_VALUE=y"
+                    require_config "CONFIG_HZ=$CONFIG_HZ_VALUE"
+                    hz_count="$(grep -Ec '^CONFIG_HZ_[0-9]+=y$' "$config" || true)"
+                    if [[ "$hz_count" != "1" ]]; then
+                      echo "::error::Expected exactly one enabled CONFIG_HZ choice, found $hz_count."
+                      exit 1
+                    fi
+
+                    if [[ "${ENABLE_NETHUNTER:-false}" == "true" ]]; then
+                      for symbol in \
+                        CONFIG_CFG80211=y \
+                        CONFIG_MAC80211=y \
+                        CONFIG_MAC80211_HAS_RC=y \
+                        CONFIG_MAC80211_RC_MINSTREL_HT=y \
+                        CONFIG_CFG80211_INTERNAL_REGDB=y \
+                        CONFIG_USB_GADGET=y \
+                        CONFIG_USB_CONFIGFS=y \
+                        CONFIG_USB_CONFIGFS_F_HID=y \
+                        CONFIG_USB_F_HID=y \
+                        CONFIG_USB_CONFIGFS_MASS_STORAGE=y \
+                        CONFIG_USB_G_ANDROID=y \
+                        CONFIG_IKCONFIG=y \
+                        CONFIG_IKCONFIG_PROC=y \
+                        CONFIG_WLAN_VENDOR_ATH=y \
+                        CONFIG_ATH9K_HTC=y \
+                        CONFIG_WLAN_VENDOR_REALTEK=y \
+                        CONFIG_RTL_CARDS=y \
+                        CONFIG_RTL8187=y \
+                        CONFIG_RTL8192CU=y \
+                        CONFIG_WLAN_VENDOR_RALINK=y \
+                        CONFIG_RT2X00=y \
+                        CONFIG_RT2800USB=y; do
+                        require_config "$symbol"
+                      done
+                      echo "NetHunter kernel options validated: mac80211 injection, USB HID/configfs, and selected USB Wi-Fi drivers."
+                      grep -E '^CONFIG_(MAC80211|USB_CONFIGFS_F_HID|USB_F_HID|IKCONFIG|IKCONFIG_PROC)=y$' "$config"
+                    else
+                      for symbol in \
+                        CONFIG_MAC80211 CONFIG_MAC80211_RC_MINSTREL CONFIG_MAC80211_RC_MINSTREL_HT \
+                        CONFIG_USB_CONFIGFS_F_HID CONFIG_USB_F_HID \
+                        CONFIG_WLAN_VENDOR_ATH CONFIG_ATH9K_HTC \
+                        CONFIG_WLAN_VENDOR_REALTEK CONFIG_RTL_CARDS CONFIG_RTL8187 CONFIG_RTL8192CU \
+                        CONFIG_WLAN_VENDOR_RALINK CONFIG_RT2X00 CONFIG_RT2800USB; do
+                        if grep -Fqx "$symbol=y" "$config"; then
+                          echo "::error::NetHunter-disabled build unexpectedly enabled $symbol."
+                          exit 1
+                        fi
+                      done
+                      echo "NetHunter-disabled configuration validated; Android USB gadget support remains enabled."
+                    fi
+
+                    case "$ZRAM_COMPRESSION" in
+                      lzo|lz4|lz4hc|zstd) zram_upper="$(printf '%s' "$ZRAM_COMPRESSION" | tr '[:lower:]' '[:upper:]')" ;;
+                      *) echo "::error::Invalid zRAM compression selection: $ZRAM_COMPRESSION"; exit 1 ;;
+                    esac
+                    require_config "CONFIG_ZRAM=y"
+                    require_config "CONFIG_CRYPTO_$zram_upper=y"
+                    zram_driver="$GITHUB_WORKSPACE/device_kernel/drivers/block/zram/zram_drv.c"
+                    if ! grep -Fqx "static const char *default_compressor = \"$ZRAM_COMPRESSION\";" "$zram_driver"; then
+                      echo "::error::Selected zRAM compressor was not retained in zram_drv.c."
+                      exit 1
+                    fi
+                    compression_count="$(grep -Ec '^static const char [*]default_compressor = "(lzo|lz4|lz4hc|zstd)";$' "$zram_driver" || true)"
+                    if [[ "$compression_count" != "1" ]]; then
+                      echo "::error::Expected exactly one supported zRAM default compressor declaration, found $compression_count."
+                      exit 1
+                    fi
+
+                    echo "Kernel default selections validated against out/.config and zram_drv.c."
+                    # KPM Detect
+          '''
+          process = replace_once(process, config_validation_marker, config_validation_hook, "post-defconfig option-validation hook")
+
+          # The upstream error-artifact step still uses upload-artifact v4 (Node 20).
+          # Upgrade that reference to the Node 24-compatible v7 to avoid runner warnings.
+          upload_v4 = re.compile(r"(?m)^([ \t]*uses:[ \t]*actions/upload-artifact)@v4(?:\.[0-9.]+)?[ \t]*$")
+          process, upload_v4_count = upload_v4.subn(r"\1@v7", process)
+          if upload_v4_count:
+              print(f"Upgraded {upload_v4_count} upload-artifact v4 reference(s) to v7.")
+          else:
+              print("No upload-artifact v4 reference found in build-process; no runtime upgrade needed.")
+
+          # The toolchain's bundled GNU ld may be too old for Ubuntu 24.04 host glibc
+          # (SHT_RELR/.relr.dyn). Use the runner linker for host binaries only;
+          # CROSS_COMPILE-prefixed GNU binutils remain responsible for target objects.
+          host_ld_replacements = (
+              ('make CC="ccache clang"', 'make HOSTLD=/usr/bin/ld CC="ccache clang"'),
+              ('make -j$(nproc --all) CC="ccache clang"', 'make -j$(nproc --all) HOSTLD=/usr/bin/ld CC="ccache clang"'),
+          )
+          for old, new in host_ld_replacements:
+              count = process.count(old)
+              expected = 4 if old == 'make CC="ccache clang"' else 2
+              if count != expected:
+                  raise SystemExit(f"Expected {expected} Clang make command(s) for host-linker fix, found {count}: {old}")
+              process = process.replace(old, new)
+
+          # Host utilities need the system linker, but ARM32 vDSO linking must use
+          # the ARM cross-linker. A plain /usr/bin/ld shim breaks -m armelf_linux_eabi.
+          old_clang_path = "            export PATH=$GITHUB_WORKSPACE/clang-custom/bin:$PATH\n"
+          new_clang_path = "\n".join([
+              "            mkdir -p \"$GITHUB_WORKSPACE/host-tool-bin\"",
+              "            cat > \"$GITHUB_WORKSPACE/host-tool-bin/ld\" <<'LD_WRAPPER'",
+              "          #!/usr/bin/env bash",
+              "          set -euo pipefail",
+              "          args=(\"$@\")",
+              "          for ((i=0; i<${#args[@]}; i++)); do",
+              "            if [[ \"${args[i]}\" == \"-m\" && $((i+1)) -lt ${#args[@]} && \"${args[i+1]}\" == \"armelf_linux_eabi\" ]] || [[ \"${args[i]}\" == \"-marmelf_linux_eabi\" ]]; then",
+              "              prefix=\"${CROSS_COMPILE_ARM32:-}\"",
+              "              # Prefer ld.bfd: the ARM32 default ld may be Gold, which breaks vDSO objcopy.",
+              "              for candidate in \"${prefix}ld.bfd\" \"${prefix}ld\"; do",
+              "                [[ -n \"$prefix\" ]] || continue",
+              "                resolved=\"$(command -v \"$candidate\" 2>/dev/null || true)\"",
+              "                if [[ -n \"$resolved\" && -x \"$resolved\" && \"$resolved\" != \"$0\" ]]; then",
+              "                  exec \"$resolved\" \"$@\"",
+              "                fi",
+              "              done",
+              "              arm32_ld=\"$GITHUB_WORKSPACE/gcc-32/bin/arm-linux-androideabi-ld.bfd\"",
+              "              if [[ -x \"$arm32_ld\" ]]; then exec \"$arm32_ld\" \"$@\"; fi",
+              "              echo \"::error::ARM32 vDSO linking requested, but no ARM cross-linker was found.\" >&2",
+              "              exit 127",
+              "            fi",
+              "          done",
+              "          exec /usr/bin/ld \"$@\"",
+              "          LD_WRAPPER",
+              "            chmod +x \"$GITHUB_WORKSPACE/host-tool-bin/ld\"",
+              "            export PATH=\"$GITHUB_WORKSPACE/host-tool-bin:$GITHUB_WORKSPACE/clang-custom/bin:$PATH\"",
+          ]) + "\n"
+          if process.count(old_clang_path) != 1:
+              raise SystemExit("Expected exactly one Clang PATH setup to fix host linker lookup.")
+          process = process.replace(old_clang_path, new_clang_path)
+          print("Host linker shim routes ARM32 emulation to CROSS_COMPILE_ARM32 and uses system ld for host tools.")
+
+          process_path.write_text(process)
+          print("Framework actions adjusted: rootless setup is skipped, SUSFS compatibility is inline, and selected kernel defaults are validated.")
+          PY
+
+      - name: Prepare build environment
+        uses: ./.github/workflows/build-env
+
+      - name: Fetch toolchains and kernel source
+        uses: ./.github/workflows/build-ready
+
+      - name: Ensure Non-root build has no root integration
+        if: inputs.root == 'Non-root'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/device_kernel"
+
+          # Defense in depth: remove any residual KSU source/config wiring
+          # before kernel configuration, so Non-root output contains no KSU.
+          rm -rf drivers/kernelsu KernelSU KernelSU-Next
+
+          sed -i -E \
+            '/^[[:space:]]*obj-\$\(CONFIG_KSU\)[[:space:]]*\+=[[:space:]]*kernelsu\/[[:space:]]*$/d' \
+            drivers/Makefile
+          sed -i -E \
+            '/^[[:space:]]*source[[:space:]]+"drivers\/kernelsu\/Kconfig"[[:space:]]*$/d' \
+            drivers/Kconfig
+
+          config="arch/arm64/configs/$DEFCONFIG_NAME"
+          sed -i -E '/^(# )?CONFIG_KSU(_[A-Z0-9_]+)?(=| is not set$)/d' "$config"
+
+          if grep -nE 'drivers/kernelsu|CONFIG_KSU|KernelSU' \
+            drivers/Makefile drivers/Kconfig "$config"; then
+            echo "::error::KernelSU references remain in the Non-root build configuration."
+            exit 1
+          fi
+
+          echo "Non-root cleanup passed: no KernelSU integration remains."
+
+      - name: Use Kazera62 AnyKernel3
+        shell: bash
+        run: |
+          set -euo pipefail
+          installer="$GITHUB_WORKSPACE/device_kernel/AnyKernel3"
+
+          # The framework already clones AK3_SOURCE for this configuration.
+          # Only replace it if the checked-out origin is not the user's repository.
+          remote=""
+          if [[ -d "$installer/.git" ]]; then
+            remote="$(git -C "$installer" remote get-url origin 2>/dev/null || true)"
+          fi
+          if [[ "${remote%.git}" != "${AK3_SOURCE%.git}" ]]; then
+            rm -rf "$installer"
+            git clone --depth=1 --branch "$AK3_BRANCH" "$AK3_SOURCE" "$installer"
+          fi
+
+          test -s "$installer/anykernel.sh" || {
+            echo "::error::AnyKernel3 repository is missing anykernel.sh."
+            exit 1
+          }
+
+          printf 'AnyKernel3 source: %s (%s)\n' "$AK3_SOURCE" "$AK3_BRANCH"
+
+      - name: Apply SUSFS patch for Samsung Linux 4.9
+        if: inputs.root == 'BakaSU + SUSFS'
+        uses: ./.github/workflows/patch-susfs
+
+      - name: Apply KernelSU hook patch
+        if: inputs.root != 'Non-root'
+        uses: ./.github/workflows/patch-no-kprobe
+
+      - name: Validate SUSFS integration
+        if: inputs.root == 'BakaSU + SUSFS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/device_kernel"
+
+          config="arch/arm64/configs/$DEFCONFIG_NAME"
+          test -s "$config" || {
+            echo "::error::SUSFS defconfig is missing."
+            exit 1
+          }
+          test -s fs/susfs.c || {
+            echo "::error::The SUSFS core source fs/susfs.c was not installed."
+            exit 1
+          }
+          test -s include/linux/susfs.h || {
+            echo "::error::The SUSFS public header is missing."
+            exit 1
+          }
+          grep -q 'susfs_is_current_ksu_domain' fs/namespace.c || {
+            echo "::error::SUSFS mount declarations are missing."
+            exit 1
+          }
+          grep -q 'susfs_alloc_non_unshare_ksu_vfsmnt' fs/namespace.c || {
+            echo "::error::SUSFS mount implementation did not apply completely."
+            exit 1
+          }
+          grep -q 'susfs_is_inode_sus_path' fs/namei.c || {
+            echo "::error::SUSFS path-hiding implementation did not apply."
+            exit 1
+          }
+          grep -Fq 'obj-$(CONFIG_KSU_SUSFS) += susfs.o' fs/Makefile || {
+            echo "::error::SUSFS core is not wired into fs/Makefile."
+            exit 1
+          }
+          grep -q '#include <linux/susfs_def.h>' fs/namespace.c || {
+            echo "::error::Samsung Linux 4.9 SUSFS compatibility hunk did not apply."
+            exit 1
+          }
+          grep -q 'CL_COPY_MNT_NS BIT(25)' fs/namespace.c || {
+            echo "::error::SUSFS mount namespace flag is missing."
+            exit 1
+          }
+
+          # Explicitly disable SUSFS options whose kernel-API hunks are not ported.
+          sed -i -E '/^(# )?CONFIG_KSU_SUSFS_SUS_KSTAT(=| is not set$)/d' "$config"
+          sed -i -E '/^(# )?CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG(=| is not set$)/d' "$config"
+          sed -i -E '/^(# )?CONFIG_KSU_SUSFS_OPEN_REDIRECT(=| is not set$)/d' "$config"
+          sed -i -E '/^(# )?CONFIG_KSU_SUSFS_SUS_MAP(=| is not set$)/d' "$config"
+          sed -i -E '/^(# )?CONFIG_KSU_MANUAL_HOOK(=| is not set$)/d' "$config"
+          cat >> "$config" <<'EOF'
+          # CONFIG_KSU_SUSFS_SUS_KSTAT is not set
+          # CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG is not set
+          # CONFIG_KSU_SUSFS_OPEN_REDIRECT is not set
+          # CONFIG_KSU_SUSFS_SUS_MAP is not set
+          # CONFIG_KSU_MANUAL_HOOK is not set
+          EOF
+
+          for symbol in CONFIG_KSU=y CONFIG_KSU_SUSFS=y CONFIG_KSU_SUSFS_SUS_PATH=y CONFIG_KSU_SUSFS_SUS_MOUNT=y; do
+            grep -qx "$symbol" "$config" || {
+              echo "::error::Required SUSFS config missing: $symbol"
+              exit 1
+            }
+          done
+          if grep -qE '^CONFIG_KSU_SUSFS_(SUS_KSTAT|SPOOF_CMDLINE_OR_BOOTCONFIG|OPEN_REDIRECT|SUS_MAP)=y$' "$config"; then
+            echo "::error::An unported optional SUSFS feature was enabled."
+            exit 1
+          fi
+          if grep -q '^CONFIG_KSU_MANUAL_HOOK=y$' "$config"; then
+            echo "::error::Manual hooks conflict with SUSFS inline hooks."
+            exit 1
+          fi
+          if find . -type f -name '*.rej' -print -quit | grep -q .; then
+            echo "::error::Unresolved patch rejected hunks remain in the source tree."
+            exit 1
+          fi
+
+          echo "SUSFS core validated: path/mount hiding enabled; unported optional features disabled."
+
+      - name: Apply selected kernel defaults
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/device_kernel"
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          def fail(message):
+              raise SystemExit(f"::error::{message}")
+
+          def enabled(text, symbol):
+              return re.search(rf"^{re.escape(symbol)}=y$", text, re.M) is not None
+
+          def declared(text, symbol):
+              return re.search(
+                  rf"^(?:{re.escape(symbol)}=y|# {re.escape(symbol)} is not set)$",
+                  text,
+                  re.M,
+              ) is not None
+
+          config_path = Path("arch/arm64/configs") / os.environ["DEFCONFIG_NAME"]
+          if not config_path.is_file():
+              fail(f"Defconfig not found: {config_path}")
+          config_text = config_path.read_text()
+          lines = config_text.splitlines()
+
+          governor_map = {
+              "performance": "PERFORMANCE",
+              "powersave": "POWERSAVE",
+              "userspace": "USERSPACE",
+              "ondemand": "ONDEMAND",
+              "conservative": "CONSERVATIVE",
+              "schedutil": "SCHEDUTIL",
+          }
+          governor = os.environ.get("CPU_DEFAULT_GOVERNOR", "")
+          if governor not in governor_map:
+              fail(f"Unsupported CPU governor input: {governor}")
+          gov_upper = governor_map[governor]
+          if not enabled(config_text, f"CONFIG_CPU_FREQ_GOV_{gov_upper}"):
+              fail(f"CPU governor '{governor}' is not enabled in this branch's defconfig; menu/config mismatch.")
+          if not declared(config_text, f"CONFIG_CPU_FREQ_DEFAULT_GOV_{gov_upper}"):
+              fail(f"Default CPU governor option is missing: {gov_upper}")
+          cpufreq_kconfig = Path("drivers/cpufreq/Kconfig").read_text()
+          if f"config CPU_FREQ_GOV_{gov_upper}" not in cpufreq_kconfig:
+              fail(f"CPU governor implementation is missing: {gov_upper}")
+
+          io_map = {
+              "cfq": ("CFQ", "cfq"),
+              "noop": ("NOOP", "noop"),
+              "deadline": ("DEADLINE", "deadline"),
+          }
+          io_value = os.environ.get("IO_DEFAULT_SCHEDULER", "")
+          if io_value not in io_map:
+              fail(f"Unsupported I/O scheduler input: {io_value}")
+          io_upper, io_name = io_map[io_value]
+          if not enabled(config_text, f"CONFIG_IOSCHED_{io_upper}"):
+              fail(f"I/O scheduler '{io_value}' is not enabled in this branch's defconfig; menu/config mismatch.")
+          iosched_kconfig = Path("block/Kconfig.iosched").read_text()
+          if f"config DEFAULT_{io_upper}" not in iosched_kconfig:
+              fail(f"Default I/O scheduler choice is missing: {io_upper}")
+
+          compression_map = {
+              "lzo": "LZO",
+              "lz4": "LZ4",
+              "lz4hc": "LZ4HC",
+              "zstd": "ZSTD",
+          }
+          compression = os.environ.get("ZRAM_COMPRESSION", "")
+          if compression not in compression_map:
+              fail(f"Unsupported zRAM compression input: {compression}")
+          compression_upper = compression_map[compression]
+          if not enabled(config_text, f"CONFIG_CRYPTO_{compression_upper}"):
+              fail(f"zRAM compressor '{compression}' lacks its crypto backend; menu/config mismatch.")
+          if not enabled(config_text, "CONFIG_ZRAM"):
+              fail("CONFIG_ZRAM is disabled; a default zRAM compressor cannot be selected.")
+          zcomp_path = Path("drivers/block/zram/zcomp.c")
+          zram_path = Path("drivers/block/zram/zram_drv.c")
+          if not zcomp_path.is_file() or not zram_path.is_file():
+              fail("zRAM compressor source files are missing.")
+          if f'"{compression}"' not in zcomp_path.read_text():
+              fail(f"zRAM compressor implementation is missing: {compression}")
+
+          tcp_map = {
+              "bic": ("BIC", "bic"),
+              "cubic": ("CUBIC", "cubic"),
+              "htcp": ("HTCP", "htcp"),
+              "hybla": ("HYBLA", "hybla"),
+              "vegas": ("VEGAS", "vegas"),
+              "veno": ("VENO", "veno"),
+              "westwood": ("WESTWOOD", "westwood"),
+              "dctcp": ("DCTCP", "dctcp"),
+              "cdg": ("CDG", "cdg"),
+              "bbr": ("BBR", "bbr"),
+              "reno": ("RENO", "reno"),
+          }
+          tcp_value = os.environ.get("TCP_DEFAULT_CONGESTION", "")
+          if tcp_value not in tcp_map:
+              fail(f"Unsupported TCP congestion input: {tcp_value}")
+          tcp_upper, tcp_name = tcp_map[tcp_value]
+          tcp_kconfig = Path("net/ipv4/Kconfig").read_text()
+          if f"config DEFAULT_{tcp_upper}" not in tcp_kconfig:
+              fail(f"Default TCP congestion choice is missing: {tcp_upper}")
+          if tcp_value != "reno" and not enabled(config_text, f"CONFIG_TCP_CONG_{tcp_upper}"):
+              fail(f"TCP algorithm '{tcp_value}' is not enabled in this defconfig; menu/config mismatch.")
+          if not enabled(config_text, "CONFIG_TCP_CONG_ADVANCED"):
+              fail("CONFIG_TCP_CONG_ADVANCED is disabled; selected TCP choices are unavailable.")
+
+          hz_value = os.environ.get("CONFIG_HZ_VALUE", "")
+          if hz_value not in {"100", "250", "300", "1000"}:
+              fail(f"Unsupported CONFIG_HZ input: {hz_value}")
+          if not declared(config_text, f"CONFIG_HZ_{hz_value}"):
+              fail(f"CONFIG_HZ_{hz_value} is not defined by this branch's defconfig/Kconfig.")
+
+          def replace_choice(current_lines, pattern, replacement_lines):
+              matcher = re.compile(pattern)
+              kept = [line for line in current_lines if matcher.match(line) is None]
+              return kept + replacement_lines
+
+          lines = replace_choice(
+              lines,
+              r"^(?:# )?CONFIG_CPU_FREQ_DEFAULT_GOV_[A-Z0-9_]+(?:=.*| is not set)$",
+              [f"CONFIG_CPU_FREQ_DEFAULT_GOV_{gov_upper}=y"],
+          )
+          lines = replace_choice(
+              lines,
+              r"^(?:# )?CONFIG_DEFAULT_(?:DEADLINE|CFQ|NOOP)(?:=.*| is not set)$",
+              [f"CONFIG_DEFAULT_{io_upper}=y"],
+          )
+          lines = replace_choice(
+              lines,
+              r"^(?:# )?CONFIG_DEFAULT_(?:BIC|CUBIC|HTCP|HYBLA|VEGAS|VENO|WESTWOOD|DCTCP|CDG|BBR|RENO)(?:=.*| is not set)$",
+              [f"CONFIG_DEFAULT_{tcp_upper}=y"],
+          )
+          lines = replace_choice(lines, r"^(?:# )?CONFIG_DEFAULT_TCP_CONG(?:=.*| is not set)$", [])
+          lines = replace_choice(lines, r"^(?:# )?CONFIG_DEFAULT_IOSCHED(?:=.*| is not set)$", [])
+          lines = replace_choice(
+              lines,
+              r"^(?:# )?CONFIG_HZ_[0-9]+(?:=.*| is not set)$",
+              [f"CONFIG_HZ_{hz_value}=y"],
+          )
+          lines = replace_choice(lines, r"^CONFIG_HZ=.*$", [])
+
+          # Conservative opt-in tuning: remove only optional scheduling statistics
+          # and CPU-frequency transition profiling. Do not change functional drivers.
+          performance_tuning = os.environ.get("ENABLE_PERFORMANCE_TUNING", "false").lower()
+          if performance_tuning not in {"true", "false"}:
+              fail("Invalid performance tuning toggle; expected true or false.")
+
+          if performance_tuning == "true":
+              performance_symbols = (
+                  "CONFIG_SCHEDSTATS",
+                  "CONFIG_SCHED_INFO",
+                  "CONFIG_CPU_FREQ_SWITCH_PROFILER",
+              )
+              for symbol in performance_symbols:
+                  if not declared(config_text, symbol):
+                      fail(f"Performance tuning expects {symbol} to exist in this defconfig.")
+                  symbol_pattern = re.compile(
+                      rf"^(?:# )?{re.escape(symbol)}(?:=y| is not set)$"
+                  )
+                  matches = [line for line in lines if symbol_pattern.fullmatch(line)]
+                  if len(matches) != 1:
+                      fail(f"Expected exactly one defconfig setting for {symbol}, found {len(matches)}.")
+                  lines = [line for line in lines if not symbol_pattern.fullmatch(line)]
+                  lines.append(f"# {symbol} is not set")
+              print("Performance tuning enabled: optional scheduler statistics and CPU-frequency profiling disabled.")
+          else:
+              print("Performance tuning disabled: original scheduler/profiler settings retained.")
+
+          config_path.write_text("\n".join(lines) + "\n")
+
+          # Only the zRAM default is changed. The kernel boot image stays gzip
+          # compressed and continues to produce Image.gz-dtb.
+          old_block = """#if IS_ENABLED(CONFIG_CRYPTO_ZSTD)
+          static const char *default_compressor = "zstd";
+          #elif IS_ENABLED(CONFIG_CRYPTO_LZ4)
+          static const char *default_compressor = "lz4";
+          #else
+          static const char *default_compressor = "lzo";
+          #endif"""
+          driver_text = zram_path.read_text()
+          if driver_text.count(old_block) != 1:
+              fail("Expected exactly one known zRAM default-compressor block; source layout changed.")
+          driver_text = driver_text.replace(old_block, f'static const char *default_compressor = "{compression}";', 1)
+          zram_path.write_text(driver_text)
+
+          print("Selected kernel defaults prepared:")
+          print(f"  CPU governor: {governor}")
+          print(f"  I/O scheduler: {io_value}")
+          print(f"  zRAM compression: {compression}")
+          print(f"  TCP congestion: {tcp_value}")
+          print(f"  CONFIG_HZ: {hz_value}")
+          PY
+
+      - name: Prepare modern Neutron Clang assembler compatibility
+        if: inputs.clang_profile == 'Neutron Clang 19.0.0git' || inputs.clang_profile == 'Neutron Clang 24.0.0git'
+        shell: bash
+        run: |
+          set -euo pipefail
+          vdso_makefile="$GITHUB_WORKSPACE/device_kernel/arch/arm64/kernel/vdso/Makefile"
+          kernel_makefile="$GITHUB_WORKSPACE/device_kernel/Makefile"
+          test -s "$vdso_makefile" || {
+            echo "::error::ARM64 vDSO Makefile is missing; refusing to apply the compatibility workaround."
+            exit 1
+          }
+          test -s "$kernel_makefile" || {
+            echo "::error::Kernel Makefile is missing; refusing to configure the integrated assembler."
+            exit 1
+          }
+
+          python3 - "$vdso_makefile" "$kernel_makefile" <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          vdso_path = Path(sys.argv[1])
+          kernel_path = Path(sys.argv[2])
+
+          # First, preserve the narrowly scoped workaround for vDSO debug metadata.
+          vdso_source = vdso_path.read_text()
+          vdso_workaround = "CFLAGS_REMOVE_vgettimeofday.o += -g"
+          if vdso_workaround not in vdso_source.splitlines():
+              vdso_marker = "CFLAGS_REMOVE_vgettimeofday.o = -pg -Os"
+              if vdso_source.count(vdso_marker) != 1:
+                  raise SystemExit(
+                      "Expected exactly one vgettimeofday CFLAGS_REMOVE rule; "
+                      "source layout changed, so no vDSO patch was applied."
+                  )
+              vdso_source = vdso_source.replace(
+                  vdso_marker,
+                  vdso_marker
+                  + "\n\n# Legacy GNU assembler rejects newer Clang DWARF .file directives.\n"
+                  + "# The vDSO object does not need debug info for the kernel to function.\n"
+                  + vdso_workaround,
+                  1,
+              )
+              vdso_path.write_text(vdso_source)
+              print("Applied vDSO debug compatibility workaround.")
+          else:
+              print("vDSO debug compatibility workaround already present.")
+
+          # Linux 4.9 explicitly disables Clang's integrated assembler. Modern Neutron Clang
+          # emits newer .file metadata that the bundled legacy GNU assembler rejects.
+          kernel_source = kernel_path.read_text()
+          legacy_flag = re.compile(
+              r"^[ \t]*CLANG_FLAGS[ \t]*\+=[ \t]*-no-integrated-as[ \t]*(?:#.*)?$",
+              re.MULTILINE,
+          )
+          matches = list(legacy_flag.finditer(kernel_source))
+          if len(matches) == 1:
+              kernel_source = legacy_flag.sub("", kernel_source, count=1)
+              kernel_path.write_text(kernel_source)
+              print("Removed the Linux 4.9 -no-integrated-as flag for modern Neutron Clang.")
+          elif len(matches) == 0 and "-no-integrated-as" not in kernel_source:
+              print("Kernel Makefile already allows Clang's integrated assembler.")
+          else:
+              raise SystemExit(
+                  "Expected exactly one standalone CLANG_FLAGS -no-integrated-as line; "
+                  "source layout is unexpected, so the assembler change was not applied."
+              )
+
+          # Older scripts/kallsyms.c filters uppercase 'N' debugging symbols but
+          # misses lowercase 'n' symbols emitted by modern LLVM/ELF tooling. With
+          # CONFIG_EFI and relative kallsyms enabled, those symbols can corrupt the
+          # relative base and stop vmlinux with "relative symbol value out of range".
+          # Ignore lowercase 'n' symbols as well; this is only applied for the selected modern Neutron Clang profiles.
+          kallsyms_path = kernel_path.parent / "scripts/kallsyms.c"
+          if not kallsyms_path.is_file():
+              raise SystemExit("scripts/kallsyms.c is missing; cannot apply the Neutron Clang kallsyms compatibility fix.")
+          kallsyms_source = kallsyms_path.read_text()
+          old_debug_filter = "else if (stype == 'N')"
+          new_debug_filter = "else if (stype == 'N' || stype == 'n')"
+          filter_count = kallsyms_source.count(old_debug_filter)
+          if filter_count == 1:
+              kallsyms_source = kallsyms_source.replace(old_debug_filter, new_debug_filter, 1)
+              kallsyms_path.write_text(kallsyms_source)
+              print("Applied Neutron Clang kallsyms compatibility fix: ignore lowercase 'n' debug symbols.")
+          elif filter_count == 0 and new_debug_filter in kallsyms_source:
+              print("Neutron Clang kallsyms compatibility fix already present.")
+          else:
+              raise SystemExit(
+                  "Expected exactly one kallsyms uppercase-N debug-symbol filter; "
+                  f"found {filter_count}. Refusing an unsafe patch."
+              )
+
+          # Fix the exact legacy declarations rejected by modern Clang. These are
+          # no-argument functions, so adding (void) preserves their behaviour.
+          # Keep this scoped to the experimental compiler profile.
+          prototype_fixes = {
+              "drivers/staging/prima/CORE/HDD/src/wlan_hdd_trace.c": (
+                  ("void hddTraceInit()", "void hddTraceInit(void)"),
+                  (
+                      "void hdd_register_debug_callback()",
+                      "void hdd_register_debug_callback(void)",
+                  ),
+              ),
+              "drivers/video/fbdev/msm/mdss_mdp.c": (
+                  ("struct irq_info *mdss_intr_line()", "struct irq_info *mdss_intr_line(void)"),
+              ),
+              "drivers/staging/prima/CORE/MAC/src/pe/lim/limTrace.c": (
+                  ("void lim_register_debug_callback()", "void lim_register_debug_callback(void)"),
+              ),
+              "drivers/video/fbdev/msm/mdss_util.c": (
+                  ("struct mdss_util_intf *mdss_get_util_intf()", "struct mdss_util_intf *mdss_get_util_intf(void)"),
+              ),
+              "drivers/staging/prima/CORE/SME/src/sme_common/sme_Trace.c": (
+                  ("void sme_register_debug_callback()", "void sme_register_debug_callback(void)"),
+              ),
+              "drivers/staging/prima/CORE/SVC/src/nlink/wlan_nlink_srv.c": (
+                  ("int nl_srv_is_initialized()", "int nl_srv_is_initialized(void)"),
+              ),
+              "drivers/staging/prima/CORE/SVC/src/btc/wlan_btc_svc.c": (
+                  ("void btc_deactivate_service()", "void btc_deactivate_service(void)"),
+              ),
+              "drivers/staging/prima/CORE/SVC/src/logging/wlan_logging_sock_svc.c": (
+                  ("void wlan_disable_and_flush_pkt_stats()", "void wlan_disable_and_flush_pkt_stats(void)"),
+                  ("void wlan_flush_host_logs_for_fatal()", "void wlan_flush_host_logs_for_fatal(void)"),
+                  ("bool wlan_fwr_mem_dump_test_and_set_write_allowed_bit(){", "bool wlan_fwr_mem_dump_test_and_set_write_allowed_bit(void){"),
+                  ("bool wlan_fwr_mem_dump_test_and_set_read_allowed_bit(){", "bool wlan_fwr_mem_dump_test_and_set_read_allowed_bit(void){"),
+              ),
+              "drivers/staging/prima/CORE/TL/src/wlan_qct_tl_trace.c": (
+                  ("void tlTraceInit()", "void tlTraceInit(void)"),
+              ),
+              "drivers/staging/prima/CORE/VOSS/src/vos_nvitem.c": (
+                  ("v_BOOL_t vos_is_nv_country_non_zero()", "v_BOOL_t vos_is_nv_country_non_zero(void)"),
+              ),
+              "drivers/staging/prima/CORE/VOSS/src/vos_timer.c": (
+                  ("void vos_wdthread_flush_timer_work()", "void vos_wdthread_flush_timer_work(void)"),
+              ),
+              "drivers/staging/prima/CORE/VOSS/src/vos_trace.c": (
+                  ("void vosTraceInit()", "void vosTraceInit(void)"),
+                  ("void vos_register_debugcb_init()", "void vos_register_debugcb_init(void)"),
+                  ("VOS_STATUS vos_trace_spin_lock_init()", "VOS_STATUS vos_trace_spin_lock_init(void)"),
+                  ("void vos_state_info_dump_all()", "void vos_state_info_dump_all(void)"),
+              ),
+              "drivers/staging/prima/CORE/WDA/src/wlan_qct_wda.c": (
+                  ("void WDA_TransportKickDxe()", "void WDA_TransportKickDxe(void)"),
+              ),
+              "drivers/staging/prima/CORE/WDI/CP/src/wlan_qct_wdi.c": (
+                  ("void WDI_TransportKickDxe()", "void WDI_TransportKickDxe(void)"),
+              ),
+              "drivers/staging/prima/CORE/WDI/TRP/DTS/src/wlan_qct_wdi_dts.c": (
+                  ("void WDTS_ChannelKickDxe()", "void WDTS_ChannelKickDxe(void)"),
+              ),
+          }
+          source_root = kernel_path.parent
+          for relative_path, replacements in prototype_fixes.items():
+              source_path = source_root / relative_path
+              if not source_path.is_file():
+                  raise SystemExit(
+                      f"Required Neutron Clang compatibility source is missing: {relative_path}"
+                  )
+              source = source_path.read_text()
+              changed = False
+              for old_declaration, new_declaration in replacements:
+                  count = source.count(old_declaration)
+                  if count == 1:
+                      source = source.replace(old_declaration, new_declaration, 1)
+                      print(f"Patched {relative_path}: {old_declaration} -> {new_declaration}")
+                      changed = True
+                  elif count == 0 and new_declaration in source:
+                      print(f"Already patched {relative_path}: {new_declaration}")
+                  else:
+                      raise SystemExit(
+                          f"Expected exactly one occurrence of {old_declaration!r} in "
+                          f"{relative_path}, found {count}; refusing an unsafe patch."
+                      )
+              if changed:
+                  source_path.write_text(source)
+          PY
+
+      - name: Compile kernel
+        uses: ./.github/workflows/build-process
+
+
+      - name: Verify compiled NetHunter options
+        if: env.ENABLE_NETHUNTER == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          autoconf="$GITHUB_WORKSPACE/device_kernel/out/include/generated/autoconf.h"
+          test -s "$autoconf" || {
+            echo "::error::Generated autoconf.h is missing; cannot verify NetHunter options."
+            exit 1
+          }
+          for symbol in CONFIG_MAC80211 CONFIG_USB_F_HID CONFIG_USB_CONFIGFS_F_HID CONFIG_IKCONFIG CONFIG_IKCONFIG_PROC; do
+            grep -Fqx "#define $symbol 1" "$autoconf" || {
+              echo "::error::Compiled autoconf.h is missing $symbol; NetHunter configuration did not reach the compiled output."
+              exit 1
+            }
+          done
+          echo "Compiled NetHunter options confirmed:"
+          grep -E '^#define CONFIG_(MAC80211|USB_CONFIGFS_F_HID|USB_F_HID|IKCONFIG|IKCONFIG_PROC) 1$' "$autoconf"
+
+
+      - name: Verify compiled CPU governor and timer tick
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_dir="$GITHUB_WORKSPACE/device_kernel/out"
+          autoconf="$build_dir/include/generated/autoconf.h"
+          test -s "$autoconf" || {
+            echo "::error::Generated autoconf.h is missing; cannot verify compiled options."
+            exit 1
+          }
+
+          case "$CPU_DEFAULT_GOVERNOR" in
+            performance|powersave|userspace|ondemand|conservative|schedutil) cpu_gov_upper="$(printf '%s' "$CPU_DEFAULT_GOVERNOR" | tr '[:lower:]' '[:upper:]')" ;;
+            *) echo "::error::Invalid CPU governor selection: $CPU_DEFAULT_GOVERNOR"; exit 1 ;;
+          esac
+
+          grep -Fqx "#define CONFIG_CPU_FREQ_DEFAULT_GOV_${cpu_gov_upper} 1" "$autoconf" || {
+            echo "::error::Compiled kernel did not retain CPU default governor: $CPU_DEFAULT_GOVERNOR"
+            exit 1
+          }
+          grep -Fqx "#define CONFIG_HZ $CONFIG_HZ_VALUE" "$autoconf" || {
+            echo "::error::Compiled kernel CONFIG_HZ does not match selected value $CONFIG_HZ_VALUE."
+            grep -E '^#define CONFIG_HZ(_[0-9]+)? ' "$autoconf" || true
+            exit 1
+          }
+
+          # Verify settings embedded in the actual image, not only generated headers.
+          image="$build_dir/arch/arm64/boot/Image"
+          embedded_config="$build_dir/embedded-kernel.config"
+          test -s "$image" || {
+            echo "::error::Uncompressed kernel Image is missing; cannot verify embedded config."
+            exit 1
+          }
+          "$GITHUB_WORKSPACE/device_kernel/scripts/extract-ikconfig" "$image" > "$embedded_config" || {
+            echo "::error::Cannot extract IKCONFIG from the compiled kernel Image."
+            exit 1
+          }
+
+          if ! grep -Fqx "CONFIG_CPU_FREQ_DEFAULT_GOV_${cpu_gov_upper}=y" "$embedded_config"; then
+            echo "::error::Embedded kernel config does not match selected CPU governor: $CPU_DEFAULT_GOVERNOR"
+            exit 1
+          fi
+          if ! grep -Fqx "CONFIG_HZ=$CONFIG_HZ_VALUE" "$embedded_config"; then
+            echo "::error::Embedded kernel config HZ does not match selected value $CONFIG_HZ_VALUE."
+            exit 1
+          fi
+          if ! grep -Fqx "CONFIG_HZ_${CONFIG_HZ_VALUE}=y" "$embedded_config"; then
+            echo "::error::Embedded kernel config lacks CONFIG_HZ_${CONFIG_HZ_VALUE}=y."
+            exit 1
+          fi
+
+          if [[ "$ENABLE_PERFORMANCE_TUNING" == "true" ]]; then
+            for symbol in SCHEDSTATS SCHED_INFO CPU_FREQ_SWITCH_PROFILER; do
+              grep -Fqx "# CONFIG_${symbol} is not set" "$embedded_config" || {
+                echo "::error::Performance tuning expected CONFIG_${symbol} to be disabled in the embedded kernel config."
+                grep -E "^CONFIG_${symbol}=y$|^# CONFIG_${symbol} is not set$" "$embedded_config" || true
+                exit 1
+              }
+            done
+            echo "Performance tuning verified in embedded kernel config: optional scheduler/profiler instrumentation disabled."
+          fi
+
+          echo "Compiled and embedded kernel config confirmed:"
+          echo "  Default CPU governor: $CPU_DEFAULT_GOVERNOR"
+          echo "  CONFIG_HZ: $CONFIG_HZ_VALUE"
+      - name: Validate kernel image and DTB output
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          boot_dir="$GITHUB_WORKSPACE/device_kernel/out/arch/arm64/boot"
+          image_gz="$boot_dir/Image.gz"
+          image_gz_dtb="$boot_dir/Image.gz-dtb"
+          dtb_dir="$boot_dir/dts/samsung"
+
+          test -s "$image_gz" || {
+            echo "::error::Image.gz was not generated."
+            exit 1
+          }
+          test -s "$image_gz_dtb" || {
+            echo "::error::Image.gz-dtb was not generated. Packaging stopped."
+            exit 1
+          }
+          test -d "$dtb_dir" || {
+            echo "::error::Samsung DTB output directory is missing: $dtb_dir"
+            exit 1
+          }
+
+          dtb_count="$(find "$dtb_dir" -maxdepth 1 -type f -name '*.dtb' | wc -l)"
+          if [[ "$dtb_count" -eq 0 ]]; then
+            echo "::error::No Samsung DTB files were generated. Check DTC_EXT and CONFIG_BUILD_ARM64_DT_OVERLAY."
+            exit 1
+          fi
+          if cmp -s "$image_gz" "$image_gz_dtb"; then
+            echo "::error::Image.gz-dtb matches Image.gz byte-for-byte; DTB concatenation likely failed."
+            exit 1
+          fi
+
+          printf 'Image.gz: %s bytes\n' "$(stat -c %s "$image_gz")"
+          printf 'Image.gz-dtb: %s bytes\n' "$(stat -c %s "$image_gz_dtb")"
+          printf 'Samsung DTB count: %s\n' "$dtb_count"
+
+      - name: Package AnyKernel3 ZIP
+        uses: ./.github/workflows/pack-process
+
+      - name: Validate package
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${PACK_NAME:?Packaging did not export PACK_NAME}"
+
+          zip_path="$GITHUB_WORKSPACE/device_kernel/$PACK_NAME"
+          test -s "$zip_path" || {
+            echo "::error::AnyKernel3 ZIP was not found: $zip_path"
+            exit 1
+          }
+
+          unzip -tq "$zip_path"
+          unzip -Z1 "$zip_path" | grep -Fxq 'Image.gz-dtb' || {
+            echo "::error::ZIP does not contain Image.gz-dtb."
+            exit 1
+          }
+
+          echo "Package validation passed: $PACK_NAME"
+
+      - name: Collect build metadata
+        shell: bash
+        env:
+          CLANG_PROFILE: ${{ inputs.clang_profile }}
+        run: |
+          set -euo pipefail
+          source_dir="$GITHUB_WORKSPACE/device_kernel"
+          clang_bin="$GITHUB_WORKSPACE/clang-custom/bin/clang"
+          compiler_version="Unavailable"
+          gcc_version=""
+          if [[ -x "$clang_bin" ]]; then
+            compiler_version="$("$clang_bin" --version 2>/dev/null | sed -n '1p' || true)"
+          fi
+          [[ -n "$compiler_version" ]] || compiler_version="Unavailable"
+
+          gcc_bin=""
+          if [[ -d "$GITHUB_WORKSPACE/gcc-64/bin" ]]; then
+            gcc_bin="$(find "$GITHUB_WORKSPACE/gcc-64/bin" -maxdepth 1 \( -name 'aarch64-linux-android-gcc' -o -name 'aarch64-linux-gnu-gcc' \) -print -quit 2>/dev/null || true)"
+          fi
+          if [[ -n "$gcc_bin" && -x "$gcc_bin" ]]; then
+            gcc_version="$("$gcc_bin" --version 2>/dev/null | sed -n '1p' || true)"
+          fi
+          [[ -n "$gcc_version" ]] || gcc_version="Not detected by metadata step"
+
+          # Read VERSION.PATCHLEVEL.SUBLEVEL directly for an accurate public release string.
+          # Keep KERNEL_VERSION unchanged because the framework uses 4.9 for SUSFS patch filenames.
+          kernel_release="$(awk '
+            /^VERSION[[:space:]]*=/ { version=$3 }
+            /^PATCHLEVEL[[:space:]]*=/ { patchlevel=$3 }
+            /^SUBLEVEL[[:space:]]*=/ { sublevel=$3 }
+            END {
+              if (version != "" && patchlevel != "" && sublevel != "")
+                printf "%s.%s.%s", version, patchlevel, sublevel
+            }
+          ' "$source_dir/Makefile")"
+          [[ -n "$kernel_release" ]] || kernel_release="${KERNEL_VERSION:-unknown}"
+          kernel_commit="$(git -C "$source_dir" rev-parse --short=12 HEAD 2>/dev/null || printf '%s' "${GITHUB_SHA:0:12}")"
+          build_time="$(date -u '+%Y-%m-%d %H:%M UTC')"
+
+          # Reproduce BakaSU's own version calculation from the checked-out source.
+          # This reports the code and display version that its Kbuild derives at compile time.
+          bakasu_version="N/A"
+          bakasu_version_code="N/A"
+          if [[ "$ROOT_NAME" == "BakaSU + SUSFS" || "$ROOT_NAME" == "BakaSU without SUSFS" ]]; then
+            bakasu_repo="$source_dir/KernelSU"
+            if [[ -f "$bakasu_repo/kernel/Kbuild" && -e "$bakasu_repo/.git" ]]; then
+              bakasu_local_version="$(git -C "$bakasu_repo" rev-list --count HEAD 2>/dev/null || true)"
+              bakasu_commit_sha="$(git -C "$bakasu_repo" rev-parse --short=8 HEAD 2>/dev/null || true)"
+              bakasu_tag_name="$(git -C "$bakasu_repo" describe --abbrev=0 --tags 2>/dev/null || printf 'v4.1.0')"
+              bakasu_branch_name="$(git -C "$bakasu_repo" branch --show-current 2>/dev/null || true)"
+              [[ -n "$bakasu_branch_name" ]] || bakasu_branch_name="unknown"
+
+              if [[ "$bakasu_local_version" =~ ^[0-9]+$ && -n "$bakasu_commit_sha" ]]; then
+                # Matches Kbuild: 30000 + git rev-list --count HEAD + 700.
+                bakasu_version_code=$((30700 + bakasu_local_version))
+                if ! git -C "$bakasu_repo" diff-index --quiet HEAD; then
+                  bakasu_commit_sha="${bakasu_commit_sha}-dirty"
+                fi
+
+                bakasu_format="$(sed -n 's/^CONFIG_KSU_FULL_NAME_FORMAT="\([^"]*\)".*/\1/p' "$source_dir/out/.config" | head -n 1)"
+                [[ -n "$bakasu_format" ]] || bakasu_format="%TAG_NAME%-%COMMIT_SHA%"
+                bakasu_version="${bakasu_format//%TAG_NAME%/$bakasu_tag_name}"
+                bakasu_version="${bakasu_version//%COMMIT_SHA%/$bakasu_commit_sha}"
+                bakasu_version="${bakasu_version//%REPO_NAME%/BakaSU}"
+                bakasu_version="${bakasu_version//%BRANCH_NAME%/$bakasu_branch_name}"
+                bakasu_version="${bakasu_version//%KSU_VERSION%/$bakasu_version_code}"
+                echo "Detected BakaSU version: $bakasu_version (code $bakasu_version_code)"
+              else
+                bakasu_version="Not detected"
+                bakasu_version_code="Not detected"
+                echo "::warning::Could not derive BakaSU version from its checked-out Git metadata."
+              fi
+            else
+              bakasu_version="Not detected"
+              bakasu_version_code="Not detected"
+              echo "::warning::BakaSU Git source was not found at $bakasu_repo; version will be shown as not detected."
+            fi
+          fi
+
+          case "$ROOT_NAME" in
+            "Non-root")
+              root_version="Disabled"
+              manager_support="N/A"
+              susfs_summary="Disabled"
+              ;;
+            "BakaSU + SUSFS"|"BakaSU without SUSFS")
+              root_version="BakaSU"
+              manager_support="KernelSU Official, KOWSU, BakaSU"
+              if [[ "$SUSFS_ENABLE" == "true" ]]; then
+                susfs_summary="v$SUSFS_VERSION"
+              else
+                susfs_summary="Disabled"
+              fi
+              ;;
+            *)
+              root_version="$ROOT_NAME"
+              manager_support="Not specified for $root_version"
+              susfs_summary="Disabled"
+              ;;
+          esac
+
+          {
+            echo "BUILT_KERNEL_RELEASE=$kernel_release"
+            echo "KERNEL_SOURCE_COMMIT=$kernel_commit"
+            echo "BUILD_TIME_UTC=$build_time"
+            echo "CLANG_VERSION=$compiler_version"
+            echo "GCC_VERSION=$gcc_version"
+            echo "ROOT_VERSION=$root_version"
+            echo "MANAGER_SUPPORT=$manager_support"
+            echo "SUSFS_SUMMARY=$susfs_summary"
+            echo "BAKASU_VERSION=$bakasu_version"
+            echo "BAKASU_VERSION_CODE=$bakasu_version_code"
+          } >> "$GITHUB_ENV"
+
+          {
+            echo "## NOCTURNE build metadata"
+            echo
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Device | Samsung Galaxy M11 / A11 (SDM450) |"
+            echo "| Kernel name | $KERNEL_NAME |"
+            echo "| Kernel release | $kernel_release |"
+            echo "| Source branch | $KERNEL_BRANCH |"
+            echo "| Source commit | $kernel_commit |"
+            echo "| Build time | $build_time |"
+            echo "| Compiler profile | $CLANG_PROFILE |"
+            echo "| Clang | $compiler_version |"
+            echo "| GCC cross compiler | $gcc_version |"
+            echo "| Root | $root_version |"
+            echo "| BakaSU version | $bakasu_version (code $bakasu_version_code) |"
+            echo "| Manager support | $manager_support |"
+            echo "| SUSFS | $susfs_summary |"
+            echo "| Defconfig | $DEFCONFIG_NAME |"
+            echo "| CPU governor | $CPU_DEFAULT_GOVERNOR |"
+            echo "| I/O scheduler | $IO_DEFAULT_SCHEDULER |"
+            echo "| zRAM compression | $ZRAM_COMPRESSION |"
+            echo "| TCP congestion | $TCP_DEFAULT_CONGESTION |"
+            echo "| CONFIG_HZ | $CONFIG_HZ_VALUE |"
+            echo "| Package method | $PACK_METHOD |"
+            echo "| ZIP | $PACK_NAME |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload ZIP artifact
+        uses: ./.github/workflows/upload-files
+
+      - name: Send kernel ZIP with build report to Telegram (optional)
+        continue-on-error: true
+        shell: bash
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          # Set this GitHub Actions secret to @public_channel or the channel ID (-100...).
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+          CLANG_PROFILE: ${{ inputs.clang_profile }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${TELEGRAM_BOT_TOKEN:-}" || -z "${TELEGRAM_CHANNEL_ID:-}" ]]; then
+            echo "::notice::Telegram bot token or channel destination is not configured; the GitHub Actions artifact is available instead."
+            exit 0
+          fi
+
+          if [[ "$SEND_ZIP_TO_TELEGRAM" == "true" ]]; then
+            : "${PACK_NAME:?Packaging did not export PACK_NAME}"
+            zip_path="$GITHUB_WORKSPACE/device_kernel/$PACK_NAME"
+            test -s "$zip_path"
+
+              report=$(cat <<EOF
+          Kernel: $KERNEL_NAME
+          Device: Samsung Galaxy M11/A11
+          Kernel: $BUILT_KERNEL_RELEASE
+          Root: $ROOT_VERSION
+          BakaSU Version: $BAKASU_VERSION (code $BAKASU_VERSION_CODE)
+          Manager Support: $MANAGER_SUPPORT
+          SUSFS: $SUSFS_SUMMARY
+          Clang: $CLANG_PROFILE
+          HZ: $CONFIG_HZ_VALUE
+          CPU Governor: $CPU_DEFAULT_GOVERNOR
+          EOF
+            )
+
+              document_response="$(curl --fail-with-body --silent --show-error --retry 2 --max-time 300 \
+              --request POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+              --form-string "chat_id=${TELEGRAM_CHANNEL_ID}" \
+              --form-string "caption=$report" \
+              --form "document=@${zip_path};type=application/zip")"
+
+            printf '%s' "$document_response" | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)
+          if not data.get("ok"):
+              print("Telegram kernel ZIP upload failed: " + str(data.get("description", "unknown API error")), file=sys.stderr)
+              sys.exit(1)
+          print("Telegram accepted the kernel ZIP with build report caption.")
+          '
+
+          else
+            echo "Telegram kernel ZIP/report skipped because SEND_ZIP_TO_TELEGRAM=false."
+          fi
+
+          # Send a separate NetHunter notification only when the workflow toggle is enabled.
+          if [[ "$ENABLE_NETHUNTER" == "true" ]]; then
+            nethunter_message=$(cat <<EOF
+          Kali NetHunter: ENABLED
+          Features: Wi-Fi injection, USB HID gadget, USB Wi-Fi drivers
+          EOF
+            )
+
+            nethunter_response="$(curl --fail-with-body --silent --show-error --retry 2 --max-time 30 \
+              --request POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              --form-string "chat_id=${TELEGRAM_CHANNEL_ID}" \
+              --form-string "text=$nethunter_message")"
+
+            printf '%s' "$nethunter_response" | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)
+          if not data.get("ok"):
+              print("Telegram NetHunter notification failed: " + str(data.get("description", "unknown API error")), file=sys.stderr)
+              sys.exit(1)
+          print("Telegram accepted the Kali NetHunter notification.")
+          '
+          else
+            echo "NetHunter Telegram notification skipped because ENABLE_NETHUNTER=false."
+          fi
