@@ -160,6 +160,10 @@ env:
   AK3_SOURCE: "https://github.com/Kazera62/AnyKernel3.git"
   AK3_BRANCH: "master"
   PACK_METHOD: "AnyKernel3"
+  # Package rebuilt Samsung DTBs as the boot image DTB payload as well as Image.gz-dtb.
+  # Some boot images keep a separate DTB section, which otherwise retains the old device tree.
+  GENERATE_DTB: "true"
+  GENERATE_CHIP: "samsung"
   PACK_KMODULES: "false"
   ROM_TEXT: "${{ inputs.kernel_name }}"
   PYTHON_VERSION: "3"
@@ -1396,6 +1400,13 @@ jobs:
             echo "::error::ZIP does not contain Image.gz-dtb."
             exit 1
           }
+
+          if [[ "${GENERATE_DTB:-false}" == "true" ]]; then
+            unzip -Z1 "$zip_path" | grep -Fxq 'dtb' || {
+              echo "::error::ZIP does not contain the rebuilt external DTB payload."
+              exit 1
+            }
+          fi
 
           echo "Package validation passed: $PACK_NAME"
 
