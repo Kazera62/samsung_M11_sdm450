@@ -278,12 +278,12 @@
 				type = "passive";
 			};
 			quiet_cpus_trip: quiet_cpus-trip {
-				temperature = <43000>;
+				temperature = <45000>;
 				hysteresis = <0>;
 				type = "passive";
 			};
 			quiet_modem_trip0: quiet_modem-trip0 {
-				temperature = <45000>;
+				temperature = <47000>;
 				hysteresis = <2000>;
 				type = "passive";
 			};
@@ -293,12 +293,12 @@
 				type = "passive";
 			};
 			quiet_modem_trip1: quiet_modem-trip1 {
-				temperature = <48000>;
+				temperature = <50000>;
 				hysteresis = <3000>;
 				type = "passive";
 			};
 			quiet_modem_trip2: quiet_modem-trip2 {
-				temperature = <54000>;
+				temperature = <56000>;
 				hysteresis = <4000>;
 				type = "passive";
 			};
