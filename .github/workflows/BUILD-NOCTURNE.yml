@@ -160,8 +160,6 @@ env:
   AK3_SOURCE: "https://github.com/Kazera62/AnyKernel3.git"
   AK3_BRANCH: "master"
   PACK_METHOD: "AnyKernel3"
-  # Non-OC branch keeps the standard Image.gz-dtb-only ZIP; it has no OC-specific DTB changes.
-  GENERATE_DTB: "false"
   PACK_KMODULES: "false"
   ROM_TEXT: "${{ inputs.kernel_name }}"
   PYTHON_VERSION: "3"
@@ -476,7 +474,6 @@ jobs:
           )
           env_text = env_text[:section_start] + newer_section + env_text[section_end:]
           env_path.write_text(env_text)
-
           process_path = Path(".github/workflows/build-process/action.yml")
           process = process_path.read_text()
           config_validation_marker = "          # KPM Detect\n"
@@ -1399,22 +1396,6 @@ jobs:
             echo "::error::ZIP does not contain Image.gz-dtb."
             exit 1
           }
-
-          if [[ "${GENERATE_DTB:-false}" == "true" ]]; then
-            unzip -Z1 "$zip_path" | grep -Fxq 'dtb' || {
-              echo "::error::ZIP does not contain the rebuilt external DTB payload."
-              exit 1
-            }
-            expected_dtb="$GITHUB_WORKSPACE/device_kernel/out/arch/arm64/boot/dts/samsung/sdm450-pmi632.dtb"
-            test -s "$expected_dtb" || {
-              echo "::error::Expected SDM450 + PMI632 DTB is missing from the build output."
-              exit 1
-            }
-            unzip -p "$zip_path" dtb | cmp -s - "$expected_dtb" || {
-              echo "::error::Packaged DTB is not the target SDM450 + PMI632 DTB."
-              exit 1
-            }
-          fi
 
           echo "Package validation passed: $PACK_NAME"
 
