@@ -8,7 +8,7 @@ on:
         description: "Custom kernel name"
         required: true
         type: string
-        default: NOCTURNE
+        default: NOCTURNE-LIMITED-OC
       clang_profile:
         description: "Compiler toolchain for this Linux 4.9 kernel"
         required: true
