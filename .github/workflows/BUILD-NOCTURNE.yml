@@ -160,10 +160,8 @@ env:
   AK3_SOURCE: "https://github.com/Kazera62/AnyKernel3.git"
   AK3_BRANCH: "master"
   PACK_METHOD: "AnyKernel3"
-  # Package rebuilt Samsung DTBs as the boot image DTB payload as well as Image.gz-dtb.
-  # Some boot images keep a separate DTB section, which otherwise retains the old device tree.
-  GENERATE_DTB: "true"
-  GENERATE_CHIP: "samsung"
+  # Non-OC branch keeps the standard Image.gz-dtb-only ZIP; it has no OC-specific DTB changes.
+  GENERATE_DTB: "false"
   PACK_KMODULES: "false"
   ROM_TEXT: "${{ inputs.kernel_name }}"
   PYTHON_VERSION: "3"
@@ -478,42 +476,6 @@ jobs:
           )
           env_text = env_text[:section_start] + newer_section + env_text[section_end:]
           env_path.write_text(env_text)
-          # The generic upstream packer concatenates every Samsung DTB, alphabetically.
-          # For Galaxy M11/A11, flash only the exact SDM450 + PMI632 tree as the
-          # boot-image DTB section; a multi-board raw concatenation can select the wrong tree.
-          pack_path = Path(".github/workflows/pack-process/action.yml")
-          pack = pack_path.read_text()
-          pack_expr = "$" + "{{"
-          old_dtb_pack = "\n".join([
-              '          elif [ "' + pack_expr + ' env.GENERATE_DTB }}" == "true" ]; then',
-              '            if ls $IMAGE_DIR/dts/' + pack_expr + ' env.GENERATE_CHIP }}/*.dtb 1> /dev/null 2>&1; then',
-              '                DTB_PATH="dts"',
-              '            elif ls $IMAGE_DIR/dts/vendor/' + pack_expr + ' env.GENERATE_CHIP }}/*.dtb 1> /dev/null 2>&1; then',
-              '                DTB_PATH="dts/vendor"',
-              '            else',
-              '                echo "[-] Could not found dts, abort."',
-              '                false',
-              '            fi',
-              "",
-              '            cat $IMAGE_DIR/$DTB_PATH/' + pack_expr + ' env.GENERATE_CHIP }}/*.dtb > $IMAGE_DIR/dtb',
-              '            cp -fp $IMAGE_DIR/dtb tmp',
-              '            echo "Generated ' + pack_expr + ' env.GENERATE_CHIP }} DTB."',
-          ])
-          new_dtb_pack = "\n".join([
-              '          elif [ "' + pack_expr + ' env.GENERATE_DTB }}" == "true" ]; then',
-              '            target_dtb="$IMAGE_DIR/dts/samsung/sdm450-pmi632.dtb"',
-              '            test -s "$target_dtb" || {',
-              '              echo "::error::Required SDM450 + PMI632 DTB is missing: $target_dtb"',
-              '              exit 1',
-              '            }',
-              "",
-              '            cp -fp "$target_dtb" "$IMAGE_DIR/dtb"',
-              '            cp -fp "$target_dtb" tmp/dtb',
-              '            echo "Generated target device DTB: SDM450 + PMI632."',
-          ])
-          pack = replace_once(pack, old_dtb_pack, new_dtb_pack, "target Samsung DTB packaging block")
-          pack_path.write_text(pack)
-          print("AnyKernel3 will package only the SDM450 + PMI632 DTB for M11/A11.")
 
           process_path = Path(".github/workflows/build-process/action.yml")
           process = process_path.read_text()
