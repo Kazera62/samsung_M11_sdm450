@@ -36,7 +36,7 @@ static int dyn_fsync_reboot_callback(struct notifier_block *nb,
 				     unsigned long action, void *data)
 {
 	switch (action) {
-	case SYS_DOWN:
+	/* SYS_RESTART aliases SYS_DOWN in this kernel's reboot.h. */
 	case SYS_RESTART:
 	case SYS_HALT:
 	case SYS_POWER_OFF:
