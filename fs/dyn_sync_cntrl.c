@@ -86,7 +86,13 @@ static int dyn_fsync_fb_notifier_callback(struct notifier_block *nb,
 	int *blank;
 	bool was_screen_on;
 
-	if (action != FB_EARLY_EVENT_BLANK || !event || !event->data)
+	/*
+	 * Use the successful blank event rather than the early event so a failed
+	 * panel blank cannot leave the state incorrectly marked as screen-off.
+	 * fb0 is the primary display on this device; ignore secondary framebuffers.
+	 */
+	if (action != FB_EVENT_BLANK || !event || !event->data ||
+	    !event->info || event->info->node != 0)
 		return NOTIFY_DONE;
 
 	blank = event->data;
@@ -99,9 +105,9 @@ static int dyn_fsync_fb_notifier_callback(struct notifier_block *nb,
 		WRITE_ONCE(dyn_fsync_screen_on, false);
 
 		/*
-		 * Flush once on the transition to screen-off if Dynamic Fsync
-		 * was active. The regular sync syscall and sync_file_range
-		 * behavior remains unchanged.
+		 * Flush once on the successful transition to screen-off if
+		 * Dynamic Fsync was active. sync(2) and sync_file_range behavior
+		 * remains unchanged.
 		 */
 		if (was_screen_on && READ_ONCE(dyn_fsync_active))
 			dyn_fsync_sync_all();
