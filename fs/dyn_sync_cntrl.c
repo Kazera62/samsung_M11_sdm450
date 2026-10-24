@@ -53,7 +53,7 @@ static int dyn_fsync_reboot_callback(struct notifier_block *nb,
 	}
 	mutex_unlock(&dyn_fsync_mutex);
 
-	return NOTIFY_DONE;
+	return NOTIFY_OK;
 }
 
 static ssize_t dyn_fsync_active_show(struct kobject *kobj,
@@ -160,8 +160,6 @@ static int dyn_fsync_fb_notifier_callback(struct notifier_block *nb,
 static int __init dyn_fsync_init(void)
 {
 	int ret;
-
-	dyn_fsync_fb_notifier.notifier_call = dyn_fsync_fb_notifier_callback;
 
 	dyn_fsync_kobj = kobject_create_and_add("dyn_fsync", kernel_kobj);
 	if (!dyn_fsync_kobj)
