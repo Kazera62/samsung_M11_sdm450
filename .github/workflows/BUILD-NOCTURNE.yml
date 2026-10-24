@@ -796,6 +796,47 @@ jobs:
         if: inputs.root != 'Non-root'
         uses: ./.github/workflows/patch-no-kprobe
 
+      # Current BakaSU adds a standalone preinit runner. On this legacy ARM64
+      # kernel, CLANG_FLAGS may not carry the target into that sub-build, causing
+      # x86-64 runner.elf.o to be passed to the AArch64 linker.
+      - name: Fix BakaSU preinit runner target architecture
+        if: inputs.root != 'Non-root'
+        shell: bash
+        run: |
+          set -euo pipefail
+          runner_mk="$GITHUB_WORKSPACE/device_kernel/${KERNELSU_NAME}/kernel/tools/code_generation/preinit_runner/preinit_runner.mk"
+          test -s "$runner_mk" || {
+            echo "::error::BakaSU preinit runner Makefile is missing: $runner_mk"
+            exit 1
+          }
+
+          python3 - "$runner_mk" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          source = path.read_text()
+          marker = "\t-ffunction-sections -fdata-sections\n"
+          fix = (
+              "\n# This kernel is ARM64, but legacy build wrappers may leave the standalone\n"
+              "# preinit runner without CLANG_FLAGS' target triple. Force its ELF machine\n"
+              "# type to AArch64 before the cross-linker embeds it in the kernel.\n"
+              "ifeq ($(ARCH),arm64)\n"
+              "KSU_RUNNER_CFLAGS += --target=aarch64-linux-gnu\n"
+              "endif\n"
+          )
+          if "KSU_RUNNER_CFLAGS += --target=aarch64-linux-gnu" in source:
+              print("BakaSU preinit runner already has explicit ARM64 target flag.")
+          else:
+              if source.count(marker) != 1:
+                  raise SystemExit(
+                      "::error::Unexpected BakaSU preinit runner Makefile layout; no change applied."
+                  )
+              source = source.replace(marker, marker + fix, 1)
+              path.write_text(source)
+              print("Added explicit AArch64 target to BakaSU preinit runner compilation.")
+          PY
+
       - name: Validate SUSFS integration
         if: inputs.root == 'BakaSU + SUSFS'
         shell: bash
