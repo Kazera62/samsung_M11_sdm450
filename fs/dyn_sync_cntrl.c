@@ -41,6 +41,7 @@ static ssize_t dyn_fsync_active_store(struct kobject *kobj,
 		struct kobj_attribute *attr, const char *buf, size_t count)
 {
 	unsigned int value;
+	bool was_active;
 	int ret;
 
 	ret = kstrtouint(buf, 10, &value);
@@ -50,8 +51,20 @@ static ssize_t dyn_fsync_active_store(struct kobject *kobj,
 	if (value > 1)
 		return -EINVAL;
 
+	mutex_lock(&dyn_fsync_mutex);
+	was_active = READ_ONCE(dyn_fsync_active);
 	WRITE_ONCE(dyn_fsync_active, value != 0);
-	pr_info("dynamic_fsync: %s\n",
+
+	/*
+	 * If disabling Dynamic Fsync, synchronously flush data whose fsync()
+	 * requests may have been deferred while the feature was active.
+	 */
+	if (was_active && !value)
+		dyn_fsync_sync_all();
+
+	mutex_unlock(&dyn_fsync_mutex);
+
+	pr_info("dynamic_fsync: %s\\n",
 		value ? "enabled" : "disabled");
 
 	return count;
