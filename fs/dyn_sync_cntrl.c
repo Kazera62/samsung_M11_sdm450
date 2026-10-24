@@ -21,6 +21,7 @@
 #include <linux/notifier.h>
 #include <linux/fb.h>
 #include <linux/errno.h>
+#include <linux/reboot.h>
 #include <linux/dyn_sync_cntrl.h>
 
 bool dyn_fsync_active = false;
@@ -29,6 +30,31 @@ bool dyn_fsync_screen_on = true;
 static DEFINE_MUTEX(dyn_fsync_mutex);
 static struct kobject *dyn_fsync_kobj;
 static struct notifier_block dyn_fsync_fb_notifier;
+static struct notifier_block dyn_fsync_reboot_notifier;
+
+static int dyn_fsync_reboot_callback(struct notifier_block *nb,
+				     unsigned long action, void *data)
+{
+	switch (action) {
+	case SYS_DOWN:
+	case SYS_RESTART:
+	case SYS_HALT:
+	case SYS_POWER_OFF:
+		break;
+	default:
+		return NOTIFY_DONE;
+	}
+
+	mutex_lock(&dyn_fsync_mutex);
+	if (READ_ONCE(dyn_fsync_active)) {
+		/* Stop deferring fsync requests and flush before shutdown/reboot. */
+		WRITE_ONCE(dyn_fsync_active, false);
+		dyn_fsync_sync_all();
+	}
+	mutex_unlock(&dyn_fsync_mutex);
+
+	return NOTIFY_DONE;
+}
 
 static ssize_t dyn_fsync_active_show(struct kobject *kobj,
 		struct kobj_attribute *attr, char *buf)
@@ -149,10 +175,23 @@ static int __init dyn_fsync_init(void)
 		return ret;
 	}
 
+	dyn_fsync_fb_notifier.notifier_call = dyn_fsync_fb_notifier_callback;
 	ret = fb_register_client(&dyn_fsync_fb_notifier);
 	if (ret) {
 		pr_err("dynamic_fsync: failed to register framebuffer notifier: %d\n",
 		       ret);
+		sysfs_remove_group(dyn_fsync_kobj, &dyn_fsync_attr_group);
+		kobject_put(dyn_fsync_kobj);
+		dyn_fsync_kobj = NULL;
+		return ret;
+	}
+
+	dyn_fsync_reboot_notifier.notifier_call = dyn_fsync_reboot_callback;
+	ret = register_reboot_notifier(&dyn_fsync_reboot_notifier);
+	if (ret) {
+		pr_err("dynamic_fsync: failed to register reboot notifier: %d\n",
+		       ret);
+		fb_unregister_client(&dyn_fsync_fb_notifier);
 		sysfs_remove_group(dyn_fsync_kobj, &dyn_fsync_attr_group);
 		kobject_put(dyn_fsync_kobj);
 		dyn_fsync_kobj = NULL;
@@ -165,6 +204,7 @@ static int __init dyn_fsync_init(void)
 
 static void __exit dyn_fsync_exit(void)
 {
+	unregister_reboot_notifier(&dyn_fsync_reboot_notifier);
 	fb_unregister_client(&dyn_fsync_fb_notifier);
 
 	if (dyn_fsync_kobj) {
