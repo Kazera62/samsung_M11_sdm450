@@ -64,7 +64,7 @@ static ssize_t dyn_fsync_active_store(struct kobject *kobj,
 
 	mutex_unlock(&dyn_fsync_mutex);
 
-	pr_info("dynamic_fsync: %s\\n",
+	pr_info("dynamic_fsync: %s\n",
 		value ? "enabled" : "disabled");
 
 	return count;
