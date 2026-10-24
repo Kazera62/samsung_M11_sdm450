@@ -315,4 +315,16 @@ endif # NETWORK_FILESYSTEMS
 source "fs/nls/Kconfig"
 source "fs/dlm/Kconfig"
 
+config DYNAMIC_FSYNC
+	bool "Dynamic Fsync"
+	depends on FB && FB_NOTIFY
+	default n
+	help
+	  Add a runtime Dynamic Fsync control at
+	  /sys/kernel/dyn_fsync/Dyn_fsync_active. When enabled by the user,
+	  fsync/fdatasync requests are skipped while the framebuffer is on;
+	  outstanding filesystem data is synchronized when the framebuffer blanks.
+	  This can reduce write latency but weakens data durability while enabled.
+	  The runtime control defaults to disabled.
+
 endmenu
