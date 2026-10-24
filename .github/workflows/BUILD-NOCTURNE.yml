@@ -835,7 +835,7 @@ jobs:
       # kernel, CLANG_FLAGS may not carry the target into that sub-build, causing
       # x86-64 runner.elf.o to be passed to the AArch64 linker.
       - name: Fix BakaSU preinit runner target architecture
-        if: inputs.root != 'Non-root'
+        if: inputs.root == 'BakaSU without SUSFS'
         shell: bash
         run: |
           set -euo pipefail
