@@ -1056,26 +1056,6 @@ jobs:
           )
           lines = replace_choice(lines, r"^CONFIG_HZ=.*$", [])
 
-          # Always disable optional scheduler statistics and CPU-frequency profiling.
-          # These counters are not required for normal operation and add instrumentation overhead.
-          performance_symbols = (
-              "CONFIG_SCHEDSTATS",
-              "CONFIG_SCHED_INFO",
-              "CONFIG_CPU_FREQ_SWITCH_PROFILER",
-          )
-          for symbol in performance_symbols:
-              if not declared(config_text, symbol):
-                  fail(f"Performance tuning expects {symbol} to exist in this defconfig.")
-              symbol_pattern = re.compile(
-                  rf"^(?:# )?{re.escape(symbol)}(?:=y| is not set)$"
-              )
-              matches = [line for line in lines if symbol_pattern.fullmatch(line)]
-              if len(matches) != 1:
-                  fail(f"Expected exactly one defconfig setting for {symbol}, found {len(matches)}.")
-              lines = [line for line in lines if not symbol_pattern.fullmatch(line)]
-              lines.append(f"# {symbol} is not set")
-          print("Always-on performance tuning applied: scheduler statistics and CPU-frequency profiling disabled.")
-
           config_path.write_text("\n".join(lines) + "\n")
 
           # Only the zRAM default is changed. The kernel boot image stays gzip
@@ -1352,15 +1332,6 @@ jobs:
             echo "::error::Embedded kernel config lacks CONFIG_HZ_${CONFIG_HZ_VALUE}=y."
             exit 1
           fi
-
-          for symbol in SCHEDSTATS SCHED_INFO CPU_FREQ_SWITCH_PROFILER; do
-            grep -Fqx "# CONFIG_${symbol} is not set" "$embedded_config" || {
-              echo "::error::Always-on performance tuning expected CONFIG_${symbol} to be disabled in the embedded kernel config."
-              grep -E "^CONFIG_${symbol}=y$|^# CONFIG_${symbol} is not set$" "$embedded_config" || true
-              exit 1
-            }
-          done
-          echo "Embedded kernel config verified: scheduler statistics and CPU-frequency profiling are disabled."
 
           echo "Compiled and embedded kernel config confirmed:"
           echo "  Default CPU governor: $CPU_DEFAULT_GOVERNOR"
