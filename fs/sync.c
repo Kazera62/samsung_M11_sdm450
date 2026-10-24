@@ -17,6 +17,10 @@
 #include <linux/backing-dev.h>
 #include "internal.h"
 
+#ifdef CONFIG_DYNAMIC_FSYNC
+#include <linux/dyn_sync_cntrl.h>
+#endif
+
 #define VALID_FLAGS (SYNC_FILE_RANGE_WAIT_BEFORE|SYNC_FILE_RANGE_WRITE| \
 			SYNC_FILE_RANGE_WAIT_AFTER)
 
@@ -344,6 +348,27 @@ static void fdatawait_one_bdev(struct block_device *bdev, void *arg)
 	filemap_fdatawait_keep_errors(bdev->bd_inode->i_mapping);
 }
 
+#ifdef CONFIG_DYNAMIC_FSYNC
+/*
+ * Flush outstanding filesystem and block-device data when the display blanks.
+ * This mirrors the kernel's sync(2) writeback sequence without routing through
+ * the syscall entry point.
+ */
+void dyn_fsync_sync_all(void)
+{
+	int nowait = 0, wait = 1;
+
+	wakeup_flusher_threads(0, WB_REASON_SYNC);
+	iterate_supers(sync_inodes_one_sb, NULL);
+	iterate_supers(sync_fs_one_sb, &nowait);
+	iterate_supers(sync_fs_one_sb, &wait);
+	iterate_bdevs(fdatawrite_one_bdev, NULL);
+	iterate_bdevs(fdatawait_one_bdev, NULL);
+	if (unlikely(laptop_mode))
+		laptop_sync_completion();
+}
+#endif
+
 /*
  * Sync everything. We start by waking flusher threads so that most of
  * writeback runs on all devices in parallel. Then we sync all inodes reliably
@@ -436,6 +461,15 @@ int vfs_fsync_range(struct file *file, loff_t start, loff_t end, int datasync)
 
 	if (!file->f_op->fsync)
 		return -EINVAL;
+#ifdef CONFIG_DYNAMIC_FSYNC
+	/*
+	 * When explicitly enabled, defer fsync/fdatasync while the display is on.
+	 * A full filesystem sync is issued on the screen-off transition.
+	 */
+	if (READ_ONCE(dyn_fsync_active) &&
+	    READ_ONCE(dyn_fsync_screen_on))
+		return 0;
+#endif
 	if (!datasync && (inode->i_state & I_DIRTY_TIME)) {
 		spin_lock(&inode->i_lock);
 		inode->i_state &= ~I_DIRTY_TIME;
