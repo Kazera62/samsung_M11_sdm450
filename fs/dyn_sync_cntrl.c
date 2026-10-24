@@ -23,7 +23,7 @@
 #include <linux/errno.h>
 #include <linux/dyn_sync_cntrl.h>
 
-bool dyn_fsync_active;
+bool dyn_fsync_active = false;
 bool dyn_fsync_screen_on = true;
 
 static DEFINE_MUTEX(dyn_fsync_mutex);
