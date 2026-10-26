@@ -275,7 +275,7 @@
 		thermal-governor = "step_wise";
 		trips {
 			gpu_trip0: gpu-trip0 {
-				temperature = <98000>;
+				temperature = <102000>;
 				hysteresis = <0>;
 				type = "passive";
 			};
@@ -296,7 +296,7 @@
 		thermal-governor = "step_wise";
 		trips {
 			cpu_trip:cpu-trip {
-				temperature = <98000>;
+				temperature = <102000>;
 				hysteresis = <0>;
 				type = "passive";
 			};
@@ -360,7 +360,7 @@
 		thermal-governor = "step_wise";
 		trips {
 			pop_trip: pop-trip {
-				temperature = <95000>;
+				temperature = <100000>;
 				hysteresis = <0>;
 				type = "passive";
 			};
