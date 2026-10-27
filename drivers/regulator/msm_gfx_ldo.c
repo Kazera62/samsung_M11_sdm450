@@ -723,7 +723,7 @@ static int msm_gfx_ldo_set_corner(struct regulator_dev *rdev,
 						corner + MIN_CORNER_OFFSET, rc);
 		}
 	} else { /* new mode - LDO */
-		new_uv = ldo_vreg->open_loop_volt[ldo_vreg->corner];
+		new_uv = ldo_vreg->open_loop_volt[corner];
 
 		if (ldo_vreg->mode == BHS_MODE) {
 			rc = switch_mode_to_ldo(ldo_vreg, new_uv);
@@ -788,10 +788,20 @@ static int msm_gfx_ldo_list_corner_voltage(struct regulator_dev *rdev,
 
 	corner -= MIN_CORNER_OFFSET;
 
-	if (corner >= 0 && corner < ldo_vreg->num_corners)
-		return ldo_vreg->open_loop_volt[corner];
-	else
+	if (corner < 0 || corner >= ldo_vreg->num_corners)
 		return -EINVAL;
+
+	/*
+	 * Only num_ldo_corners have calibrated LDO voltages. Higher GFX
+	 * corners use BHS mode; report the highest calibrated LDO voltage
+	 * for corner listing without reading past open_loop_volt[].
+	 */
+	if (!ldo_vreg->num_ldo_corners)
+		return -EINVAL;
+	if (corner >= ldo_vreg->num_ldo_corners)
+		corner = ldo_vreg->num_ldo_corners - 1;
+
+	return ldo_vreg->open_loop_volt[corner];
 }
 
 static struct regulator_ops msm_gfx_ldo_corner_ops = {
@@ -954,7 +964,7 @@ static int msm_gfx_ldo_adjust_init_voltage(struct msm_gfx_ldo *ldo_vreg)
 		return rc;
 	}
 
-	for (i = 0; i < ldo_vreg->num_corners; i++) {
+	for (i = 0; i < ldo_vreg->num_ldo_corners; i++) {
 		if (volt_adjust[i]) {
 			ldo_vreg->open_loop_volt[i] += volt_adjust[i];
 			pr_info("adjusted the open-loop voltage[%d] %d -> %d\n",
