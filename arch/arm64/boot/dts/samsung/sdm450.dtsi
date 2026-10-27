@@ -277,7 +277,7 @@
 		< 560000000   6 >,  /* NOM Plus rail vote */
 		< 650000000   7 >,  /* Turbo rail vote */
 		< 700000000   8 >,  /* 700 MHz OC: Turbo No-CPR rail vote */
-		< 747000000   9 >;  /* 747 MHz OC: Turbo No-CPR rail vote */
+		< 747000000   9 >;  /* 747 MHz OC: Binning rail vote (level 512) */
 };
 
 /* Adreno 506 GPU OPP table: frequency, corner, and bus votes */
@@ -289,7 +289,7 @@
 		#size-cells = <0>;
 		compatible = "qcom,gpu-pwrlevels";
 
-		/* Highest OPP: 747 MHz, corner 9 (Turbo No-CPR rail vote) */
+		/* Highest OPP: 747 MHz, corner 9 (Binning rail vote) */
 		qcom,gpu-pwrlevel@0 {
 			reg = <0>;
 			qcom,gpu-freq = <747000000>;
