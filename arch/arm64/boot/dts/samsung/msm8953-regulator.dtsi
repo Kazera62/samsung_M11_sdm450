@@ -36,7 +36,7 @@
 			regulator-min-microvolt =
 					<RPM_SMD_REGULATOR_LEVEL_RETENTION>;
 			regulator-max-microvolt =
-					<RPM_SMD_REGULATOR_LEVEL_TURBO_NO_CPR>;
+					<RPM_SMD_REGULATOR_LEVEL_BINNING>;
 			qcom,use-voltage-level;
 		};
 
@@ -836,7 +836,7 @@
 					<RPM_SMD_REGULATOR_LEVEL_NOM_PLUS>,
 					<RPM_SMD_REGULATOR_LEVEL_TURBO>, /* Corner 7: 650 MHz */
 					<RPM_SMD_REGULATOR_LEVEL_TURBO_NO_CPR>, /* Corner 8: 700 MHz */
-					<RPM_SMD_REGULATOR_LEVEL_TURBO_NO_CPR>; /* Corner 9: 747 MHz */
+					<RPM_SMD_REGULATOR_LEVEL_BINNING>; /* Corner 9: 747 MHz */
 
 		mem-acc-supply = <&gfx_mem_acc>;
 		qcom,mem-acc-corner-map = <1 1 1 2 2 2 2 2 2>;
