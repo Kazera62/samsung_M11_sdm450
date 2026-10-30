@@ -237,6 +237,7 @@
 				2208000  44
 				2304000  54
 				2400000  65
+				2448000  71 /* estimated scheduler cost; validate */
 			>;
 			idle-cost-data = <
 				4 3 2 1
@@ -259,6 +260,7 @@
 				2208000  160
 				2304000  170
 				2400000  180
+				2448000  185 /* estimated scheduler cost; validate */
 			>;
 			idle-cost-data = <
 				4 3 2 1
@@ -281,6 +283,7 @@
 				2208000  155
 				2304000  165
 				2400000  175
+				2448000  180 /* estimated scheduler cost; validate */
 			>;
 			idle-cost-data = <
 				4 3 2 1
