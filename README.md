@@ -8,8 +8,9 @@ Dokumen ini mencatat konfigurasi overclock (OC) CPU dan GPU yang saat ini ada pa
 
 | Komponen | Frekuensi referensi/bawaan | Frekuensi maksimum pada source OC | Kenaikan maksimum |
 |---|---:|---:|---:|
-| CPU Qualcomm SDM450 (Cortex-A53) | 1,8048 GHz (umumnya dibulatkan menjadi 1,8 GHz) | 2,400 GHz | sekitar 33,0% |
+| CPU Qualcomm SDM450 (Cortex-A53) | 1,8048 GHz (umumnya dibulatkan menjadi 1,8 GHz) | 2,448 GHz | sekitar 35,6% |
 | GPU Qualcomm Adreno 506 | 600 MHz | 747 MHz | sekitar 24,5% |
+| CCI / coherent interconnect | 721,92 MHz (pada CPU 1,8048 GHz) | 979,2 MHz | sekitar 35,6% |
 | DDR/RAM | Tidak di-overclock oleh konfigurasi ini | Tidak ada target OC DDR di source ini | — |
 
 CPU reference frequencies yang dipertahankan:
@@ -25,8 +26,9 @@ Tambahan CPU OC pada tabel saat ini:
 - 2.150,4 MHz
 - 2.208 MHz
 - 2.400 MHz
+- 2.448 MHz (OC eksperimental +2% dari 2,4 GHz)
 
-Tabel frekuensi CPU di device tree menggunakan satuan **kHz**. Contoh: `2400000` berarti 2.400.000 kHz atau 2,4 GHz.
+Tabel frekuensi CPU di device tree menggunakan satuan **kHz**. Contoh: `2448000` berarti 2.448.000 kHz atau 2,448 GHz.
 
 GPU reference max 600 MHz berasal dari tabel clock SDM450 dasar. Pada konfigurasi OC branch ini, OPP GPU tertinggi yang dipasang adalah 747 MHz. OPP yang tersedia di tabel kustom: 747, 700, 650, 560, 510, 400, 320, 216, 133,3, dan 19,2 MHz.
 
@@ -45,7 +47,7 @@ msm_cpufreq: qcom,msm-cpufreq {
 };
 ```
 
-Tabel saat ini memuat frekuensi reference sampai 1.804.800 kHz dan tambahan OC sampai 2.400.000 kHz. Ini adalah daftar frekuensi yang diekspos oleh konfigurasi cpufreq.
+Tabel saat ini memuat frekuensi reference sampai 1.804.800 kHz dan OPP OC sampai 2.448.000 kHz. OPP 2.448 MHz adalah kenaikan eksperimental 2% di atas batas 2.400 MHz sebelumnya. Ini adalah daftar frekuensi yang diekspos oleh konfigurasi cpufreq.
 
 **Saat menambah/menghapus OPP CPU:**
 1. Perbarui `qcom,cpufreq-table` pada node tersebut.
@@ -63,9 +65,9 @@ Menambah angka ke tabel cpufreq saja tidak otomatis membuat hardware mampu menja
 Cari definisi `apcs_hf_pll`. Pada konfigurasi saat ini terdapat:
 
 ```c
-.max_rate = 2400000000UL,
+.max_rate = 2448000000UL,
 ...
-VDD_MX_HF_FMAX_MAP1(SVS, 2400000000UL),
+VDD_MX_HF_FMAX_MAP1(SVS, 2448000000UL),
 ```
 
 - `.max_rate` membatasi rate maksimum HFPLL yang diterima driver.
@@ -74,7 +76,11 @@ VDD_MX_HF_FMAX_MAP1(SVS, 2400000000UL),
 
 **Jangan menganggap `SVS` sebagai angka tegangan CPU tertentu.** Source ini tidak memberikan tabel tegangan inti CPU dalam mV untuk setiap OPP. Tegangan aktual diatur melalui mekanisme clock/regulator Qualcomm dan konfigurasi PMIC/RPM perangkat. Jangan menulis angka tegangan CPU seperti 1,2 V atau 1,3 V kecuali sudah diverifikasi dari konfigurasi PMIC yang tepat atau pengukuran perangkat.
 
-Ketika mengubah batas CPU di atas 2,4 GHz, jangan hanya mengubah `.max_rate`. Periksa juga tabel cpufreq, kemampuan PLL, kelas regulator, dan semua tabel terkait. Angka di atas 2,4 GHz belum divalidasi untuk perangkat ini.
+OPP 2.448 GHz ini dipetakan ke CPR corner tertinggi yang sudah tersedia (level 10), bukan membuat corner tegangan baru. Pada `arch/arm64/boot/dts/samsung/msm8953-regulator.dtsi`, batas `qcom,cpr-voltage-ceiling` untuk corner 10 saat ini adalah 1.100.000 µV (1,10 V) pada speed bin yang didukung. Ini adalah **batas atas CPR**, bukan tegangan tetap yang selalu dipasok. Regulator PM8953 S5 memiliki batas perangkat keras 1,14 V, tetapi konfigurasi OPP ini tidak menaikkan ceiling CPR ke 1,14 V.
+
+Karena 2.448 GHz menggunakan corner/ceiling yang sama dengan 2.400 GHz, tidak ada jaminan margin tegangan cukup untuk setiap unit. Bila CPR mencapai ceiling dan silikon tidak stabil pada frekuensi tersebut, gejalanya dapat berupa hang, reboot, atau gagal boot. Kembalikan OPP maksimum ke 2.400 GHz bila pengujian menunjukkan ketidakstabilan.
+
+Jika ingin menaikkan CPU lebih jauh lagi, jangan hanya mengubah `.max_rate`. Periksa tabel cpufreq, kemampuan PLL, CPR corner/fuse tables, regulator limit, energy model, bandwidth maps, dan thermal cooling. Frekuensi di atas 2.448 GHz belum divalidasi untuk perangkat ini.
 
 ### 3. Bandwidth yang mengikuti frekuensi CPU
 
@@ -87,15 +93,44 @@ Node yang perlu diperiksa:
 - `cpubw_compute`
 - `mincpubw_compute`
 
-Pemetaan `cpu-to-dev-map` dan `qcom,core-dev-table` menghubungkan frekuensi CPU dengan level permintaan bandwidth. Pada source saat ini, frekuensi OC CPU yang tinggi menggunakan level bandwidth yang tersedia pada tabel tersebut.
+Pemetaan `cpu-to-dev-map` dan `qcom,core-dev-table` menghubungkan frekuensi CPU dengan level permintaan bandwidth. OPP 2.448 GHz dipetakan ke level bandwidth tertinggi yang sudah ada (CPUBW 7104 dan minCPUBW 5859); tabel bandwidth itu sendiri tidak dinaikkan.
 
 **Catatan penting tentang RAM:** nilai `qcom,bw-tbl` adalah tabel permintaan bandwidth bus. Komentar pada level tertingginya menuliskan 931,2 MHz, tetapi tabel tersebut bukan tabel OPP DDR dan bukan perintah langsung untuk mengubah clock RAM. Jangan menaikkan nilai bandwidth lalu menyebutnya sebagai RAM overclock. Konfigurasi ini tidak menambahkan DDR OPP atau mengubah timing/training RAM.
 
-### 4. Energy/power model CPU
+### 4. CCI / coherent interconnect
+
+**File driver:** `drivers/clk/msm/clock-cpu-8953.c`  
+**File OPP/binning:** `arch/arm64/boot/dts/samsung/msm8953.dtsi`
+
+CCI pada driver ini tidak diatur dengan tabel frekuensi yang berdiri sendiri dari CPU. Macro `CCI_RATE(rate)` menghitung clock CCI sebesar 40% dari frekuensi CPU:
+
+```c
+#define CCI_RATE(rate) (div_u64((rate * 10ULL), 25))
+```
+
+Dengan rasio 0,4 tersebut:
+
+| CPU clock | CCI clock |
+|---:|---:|
+| 1.804,8 MHz (referensi) | 721,92 MHz |
+| 2.400 MHz (OC sebelumnya) | 960 MHz |
+| 2.448 MHz (OC terbaru) | 979,2 MHz |
+
+Jadi CCI ikut naik 2% karena CPU dinaikkan dari 2.400 ke 2.448 MHz. **Rasio CCI tidak diubah** dan CCI belum di-overclock secara independen. OPP CCI 979,2 MHz ditambahkan ke seluruh properti `qcom,speed{0,2,6,7}-bin-v0-cci` dengan CPR corner 10 agar tabel voltage/frequency driver tidak berhenti di 960 MHz.
+
+Saat mengubah rasio atau frekuensi CCI di masa depan, audit secara bersamaan:
+1. `CCI_RATE()` pada `clock-cpu-8953.c`.
+2. Semua properti `qcom,speed*-bin-v0-cci` pada `msm8953.dtsi`.
+3. Batas PLL, divider/mux CCI, dan tabel corner/CPR.
+4. Transisi CPU/CCI saat beban berubah, suspend/resume, dan thermal throttling.
+
+CCI adalah coherent interconnect clock. Ini **bukan** overclock DDR, bukan pengaturan langsung clock BIMC, dan bukan bukti bahwa RAM berjalan lebih cepat. Tabel bandwidth `cpubw`/`mincpubw` tetap menggunakan level maksimum yang sudah ada.
+
+### 5. Energy/power model CPU
 
 **File pendukung:** `arch/arm64/boot/dts/samsung/msm8953-cpu.dtsi`
 
-File ini berisi data model biaya/beban cluster CPU. Jika daftar OPP diubah lagi, audit data model ini agar representasi frekuensi dan biaya daya tetap konsisten. Angka pada tabel energy model bukan nilai tegangan CPU.
+File ini berisi data model biaya/beban cluster CPU. OPP 2.448 GHz ditambahkan dengan nilai estimasi scheduler cost: core 71, cluster 0 sebesar 185, dan cluster 1 sebesar 180. Angka tersebut diekstrapolasi dari dua titik frekuensi tertinggi sebelumnya; **belum dikalibrasi lewat pengukuran daya**. Pengembang sebaiknya mengukur dan menyesuaikannya sebelum rilis produksi. Angka pada tabel energy model bukan nilai tegangan CPU.
 
 ## Peta file: GPU Adreno 506 OC
 
@@ -197,6 +232,9 @@ cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_frequencies
 # CPU: frekuensi maksimum yang dikonfigurasi
 cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq
 
+# CPU: CCI dan PLL (bila debugfs clock summary aktif)
+cat /sys/kernel/debug/clk/clk_summary | grep -E 'cci_clk|apcs_hf_pll'
+
 # GPU: frekuensi maksimum dan frekuensi saat ini
 cat /sys/class/kgsl/kgsl-3d0/max_gpuclk
 cat /sys/class/kgsl/kgsl-3d0/gpuclk
@@ -206,7 +244,8 @@ Tidak semua ROM/kernel mengekspos semua node sysfs. Jika suatu path tidak tersed
 
 Lakukan pengujian bertahap:
 - Boot, idle, dan suspend/resume.
-- Beban CPU single-core lalu multi-core.
+- Beban CPU single-core lalu multi-core; pastikan 2.448.000 kHz benar-benar tercapai.
+- Periksa CCI clock ketika CPU berada pada OPP tertinggi; target perhitungan untuk OPP 2.448 GHz adalah 979.200.000 Hz.
 - Beban GPU bertahap dan pengujian grafis/game.
 - Pantau suhu CPU/GPU, throttling, konsumsi daya, artefak visual, hang, reboot, dan kernel log.
 - Hentikan pengujian jika muncul artefak, crash, suhu tidak wajar, atau ketidakstabilan.
@@ -218,6 +257,7 @@ Jangan menyebut konfigurasi stabil sebelum diuji pada perangkat fisik. Keberhasi
 
 - Referensi perubahan OC pada dokumen ini mengacu pada branch `NOCTURNE-LIMITED-OC`.
 - Frekuensi bawaan/reference dan frekuensi OC dipisahkan agar kenaikan mudah dilihat.
+- CPU maksimum 2.448 GHz dan CCI maksimum hasil rasio 979,2 MHz masih berstatus eksperimen; belum dinyatakan stabil sebelum build dan pengujian perangkat.
 - Jangan memasukkan angka tegangan mV yang tidak didukung data PMIC/RPM atau pengukuran aktual.
 - Jangan mencampur level bus bandwidth dengan clock DDR.
 - Jika OPP diubah, audit semua tabel yang terkait: clock source, cpufreq/GPU OPP, voltage corner, regulator limit, bandwidth vote, energy model, dan thermal cooling.
