@@ -51,6 +51,7 @@
 #define APCS_PLL_TEST_CTL_HI	0x34
 
 #define UPDATE_CHECK_MAX_LOOPS 5000
+/* CCI tracks CPU at 40%: 2.448 GHz CPU produces 979.2 MHz CCI. */
 #define CCI_RATE(rate)		(div_u64((rate * 10ULL), 25))
 #define PLL_MODE(x)		(*(x)->base + (unsigned long) (x)->mode_reg)
 
@@ -132,7 +133,8 @@ static struct pll_clk apcs_hf_pll = {
 		.test_ctl_lo_val = 0x1C000000,
 	},
 	.base = &virt_bases[APCS_C0_PLL_BASE],
-	.max_rate = 2400000000UL,
+	/* Experimental +2% step above the previous 2.4 GHz ceiling. */
+	.max_rate = 2448000000UL,
 	.min_rate = 652800000UL,
 	.src_rate =  19200000UL,
 	.c = {
@@ -140,7 +142,7 @@ static struct pll_clk apcs_hf_pll = {
 		.dbg_name = "apcs_hf_pll",
 		.ops = &clk_ops_variable_rate,
 		/* MX level of MSM is much higher than of PLL */
-		VDD_MX_HF_FMAX_MAP1(SVS, 2400000000UL),
+		VDD_MX_HF_FMAX_MAP1(SVS, 2448000000UL),
 		CLK_INIT(apcs_hf_pll.c),
 	},
 };
