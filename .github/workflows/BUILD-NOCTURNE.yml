@@ -137,12 +137,11 @@ env:
 
   DEFCONFIG_NAME: "a11q_open_defconfig"
 
-  # Use BakaSU through the framework selector. The no-SUSFS choice follows main;
-  # the SUSFS choice retains the revision previously used by the known-working build.
+  # Follow the latest BakaSU main branch for both BakaSU root modes.
   KERNELSU_AUTO_GET: "${{ inputs.root != 'Non-root' && 'true' || 'false' }}"
   KERNELSU_AUTO_FORK: "bakasu"
   KERNELSU_SOURCE: ""
-  KERNELSU_BRANCH: "${{ inputs.root == 'BakaSU + SUSFS' && '5b76b884c75f729a220bb317aa4a4fc78f0e0e9c' || 'main' }}"
+  KERNELSU_BRANCH: "main"
   KERNELSU_METHOD: "shell"
   SUSFS_ENABLE: "${{ inputs.root == 'BakaSU + SUSFS' && 'true' || 'false' }}"
   SUSFS_VERSION: "2.3.0"
@@ -838,7 +837,7 @@ jobs:
       # kernel, CLANG_FLAGS may not carry the target into that sub-build, causing
       # x86-64 runner.elf.o to be passed to the AArch64 linker.
       - name: Fix BakaSU preinit runner target architecture
-        if: inputs.root == 'BakaSU without SUSFS'
+        if: inputs.root == 'BakaSU without SUSFS' || inputs.root == 'BakaSU + SUSFS'
         shell: bash
         run: |
           set -euo pipefail
@@ -873,6 +872,8 @@ jobs:
               source = source.replace(marker, marker + fix, 1)
               path.write_text(source)
               print("Added explicit AArch64 target to BakaSU preinit runner compilation.")
+          if "KSU_RUNNER_CFLAGS += --target=aarch64-linux-gnu" not in source:
+              raise SystemExit("::error::AArch64 target flag was not retained in the BakaSU preinit runner Makefile.")
           PY
 
       - name: Validate SUSFS integration
