@@ -11,7 +11,6 @@ Dokumen ini mencatat konfigurasi overclock (OC) CPU dan GPU yang saat ini ada pa
 | CPU Qualcomm SDM450 (Cortex-A53) | 1,8048 GHz (umumnya dibulatkan menjadi 1,8 GHz) | 2,448 GHz | sekitar 35,6% |
 | GPU Qualcomm Adreno 506 | 600 MHz | 747 MHz | sekitar 24,5% |
 | CCI / coherent interconnect | 721,92 MHz (pada CPU 1,8048 GHz) | 979,2 MHz | sekitar 35,6% |
-| DDR/RAM | Tidak di-overclock oleh konfigurasi ini | Tidak ada target OC DDR di source ini | — |
 
 CPU reference frequencies yang dipertahankan:
 - 652,8 MHz
