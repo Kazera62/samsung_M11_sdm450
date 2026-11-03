@@ -879,7 +879,7 @@ jobs:
                       raise SystemExit("::error::Cannot locate SUSFS include anchor for vmalloc compatibility.")
                   source = source.replace(anchor, anchor + vmalloc_include, 1)
 
-              helper_marker = "#ifdef CONFIG_KSU_SUSFS_ENABLE_LOG\n"
+              helper_marker = "#ifdef CONFIG_KSU_SUSFS_ENABLE_LOG\nDEFINE_STATIC_KEY_TRUE(susfs_is_log_enabled);"
               helper = textwrap.dedent("""\
               /*
                * Linux 4.9 predates kvmalloc(). Keep allocations compatible with
