@@ -829,6 +829,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import re
+          import textwrap
 
           path = Path("fs/susfs.c")
           if not path.is_file():
@@ -836,15 +837,16 @@ jobs:
 
           source = path.read_text()
           if "susfs_kvmalloc(" in source and "static inline void *susfs_kvmalloc" not in source:
-              vmalloc_include = "#include <linux/vmalloc.h>\\n"
+              vmalloc_include = "#include <linux/vmalloc.h>\n"
               if vmalloc_include not in source:
-                  anchor = "#include <linux/string.h>\\n"
+                  anchor = "#include <linux/string.h>\n"
                   if source.count(anchor) != 1:
                       raise SystemExit("::error::Cannot locate SUSFS include anchor for vmalloc compatibility.")
                   source = source.replace(anchor, anchor + vmalloc_include, 1)
 
-              helper_marker = "#ifdef CONFIG_KSU_SUSFS_ENABLE_LOG\\n"
-              helper = """/*
+              helper_marker = "#ifdef CONFIG_KSU_SUSFS_ENABLE_LOG\n"
+              helper = textwrap.dedent("""\
+              /*
                * Linux 4.9 predates kvmalloc(). Keep allocations compatible with
                * kvfree(): try kmalloc first, then fall back to vmalloc.
                */
@@ -862,7 +864,7 @@ jobs:
               }
               #endif
 
-              """
+              """)
               if source.count(helper_marker) != 1:
                   raise SystemExit("::error::Cannot locate unique SUSFS logging block for allocator fallback.")
               source = source.replace(helper_marker, helper + helper_marker, 1)
@@ -873,7 +875,7 @@ jobs:
               print("No legacy SUSFS kvmalloc calls found; allocator fallback not needed.")
 
           modern_read = re.compile(
-              r"(?m)^([ \\t]*)ret = kernel_read\\(fp, buf, size, &pos\\);[ \\t]*$"
+              r"(?m)^([ \t]*)ret = kernel_read\(fp, buf, size, &pos\);[ \t]*$"
           )
           matches = list(modern_read.finditer(source))
           compat_guard = "#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)"
@@ -884,10 +886,10 @@ jobs:
                   )
               indent = matches[0].group(1)
               replacement = (
-                  f"{indent}{compat_guard}\\n"
-                  f"{indent}ret = kernel_read(fp, pos, buf, size);\\n"
-                  f"{indent}#else\\n"
-                  f"{indent}ret = kernel_read(fp, buf, size, &pos);\\n"
+                  f"{indent}{compat_guard}\n"
+                  f"{indent}ret = kernel_read(fp, pos, buf, size);\n"
+                  f"{indent}#else\n"
+                  f"{indent}ret = kernel_read(fp, buf, size, &pos);\n"
                   f"{indent}#endif"
               )
               source = modern_read.sub(lambda _: replacement, source, count=1)
