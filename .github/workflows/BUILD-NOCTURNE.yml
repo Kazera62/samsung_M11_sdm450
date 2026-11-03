@@ -370,6 +370,7 @@ jobs:
           thread_info_block = re.compile(
               r'(?m)^ *if grep -q "THREAD_INFO_IN_TASK" "drivers/kernelsu/Kconfig"; then\n'
               r' *echo "CONFIG_THREAD_INFO_IN_TASK=y" >> [^\n]*\n'
+              r'(?:[ \t]*\n)*'
               r' *fi\n?'
           )
           susfs_action, count = thread_info_block.subn("", susfs_action)
