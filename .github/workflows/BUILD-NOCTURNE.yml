@@ -819,6 +819,92 @@ jobs:
         if: inputs.root == 'BakaSU + SUSFS'
         uses: ./.github/workflows/patch-susfs
 
+      - name: Fix SUSFS Linux 4.9 allocator and kernel_read compatibility
+        if: inputs.root == 'BakaSU + SUSFS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/device_kernel"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path("fs/susfs.c")
+          if not path.is_file():
+              raise SystemExit("::error::SUSFS source fs/susfs.c is missing.")
+
+          source = path.read_text()
+          if "susfs_kvmalloc(" in source and "static inline void *susfs_kvmalloc" not in source:
+              vmalloc_include = "#include <linux/vmalloc.h>\\n"
+              if vmalloc_include not in source:
+                  anchor = "#include <linux/string.h>\\n"
+                  if source.count(anchor) != 1:
+                      raise SystemExit("::error::Cannot locate SUSFS include anchor for vmalloc compatibility.")
+                  source = source.replace(anchor, anchor + vmalloc_include, 1)
+
+              helper_marker = "#ifdef CONFIG_KSU_SUSFS_ENABLE_LOG\\n"
+              helper = """/*
+               * Linux 4.9 predates kvmalloc(). Keep allocations compatible with
+               * kvfree(): try kmalloc first, then fall back to vmalloc.
+               */
+              #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0)
+              static inline void *susfs_kvmalloc(size_t size, gfp_t flags)
+              {
+                  void *p;
+
+                  p = kmalloc(size, flags);
+                  if (!p)
+                      p = vmalloc(size);
+                  if (p && (flags & __GFP_ZERO))
+                      memset(p, 0, size);
+                  return p;
+              }
+              #endif
+
+              """
+              if source.count(helper_marker) != 1:
+                  raise SystemExit("::error::Cannot locate unique SUSFS logging block for allocator fallback.")
+              source = source.replace(helper_marker, helper + helper_marker, 1)
+              print("Restored missing SUSFS kvmalloc fallback for Linux 4.9.")
+          elif "susfs_kvmalloc(" in source:
+              print("SUSFS kvmalloc fallback already exists; no duplicate added.")
+          else:
+              print("No legacy SUSFS kvmalloc calls found; allocator fallback not needed.")
+
+          modern_read = re.compile(
+              r"(?m)^([ \\t]*)ret = kernel_read\\(fp, buf, size, &pos\\);[ \\t]*$"
+          )
+          matches = list(modern_read.finditer(source))
+          compat_guard = "#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)"
+          if matches:
+              if len(matches) != 1:
+                  raise SystemExit(
+                      f"::error::Expected one SUSFS kernel_read call to adapt, found {len(matches)}."
+                  )
+              indent = matches[0].group(1)
+              replacement = (
+                  f"{indent}{compat_guard}\\n"
+                  f"{indent}ret = kernel_read(fp, pos, buf, size);\\n"
+                  f"{indent}#else\\n"
+                  f"{indent}ret = kernel_read(fp, buf, size, &pos);\\n"
+                  f"{indent}#endif"
+              )
+              source = modern_read.sub(lambda _: replacement, source, count=1)
+              print("Applied Linux 4.9 kernel_read argument-order compatibility.")
+          elif compat_guard in source and "kernel_read(fp, pos, buf, size)" in source:
+              print("SUSFS kernel_read compatibility is already present.")
+          else:
+              raise SystemExit("::error::Cannot find the expected SUSFS kernel_read call to validate.")
+
+          if "susfs_kvmalloc(" in source and "static inline void *susfs_kvmalloc" not in source:
+              raise SystemExit("::error::SUSFS allocator fallback declaration is still missing.")
+          if "kernel_read(fp, pos, buf, size)" not in source:
+              raise SystemExit("::error::Linux 4.9 kernel_read compatibility was not retained.")
+
+          path.write_text(source)
+          PY
+
       - name: Apply KernelSU hook patch
         if: inputs.root != 'Non-root'
         uses: ./.github/workflows/patch-no-kprobe
