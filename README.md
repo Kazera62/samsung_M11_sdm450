@@ -26,7 +26,7 @@ Tambahan CPU OC pada tabel saat ini:
 - 2.150,4 MHz
 - 2.208 MHz
 - 2.400 MHz
-- 2.448 MHz (OC eksperimental +2% dari 2,4 GHz)
+- 2.448 MHz
 
 Tabel frekuensi CPU di device tree menggunakan satuan **kHz**. Contoh: `2448000` berarti 2.448.000 kHz atau 2,448 GHz.
 
@@ -47,7 +47,7 @@ msm_cpufreq: qcom,msm-cpufreq {
 };
 ```
 
-Tabel saat ini memuat frekuensi reference sampai 1.804.800 kHz dan OPP OC sampai 2.448.000 kHz. OPP 2.448 MHz adalah kenaikan eksperimental 2% di atas batas 2.400 MHz sebelumnya. Ini adalah daftar frekuensi yang diekspos oleh konfigurasi cpufreq.
+Tabel saat ini memuat frekuensi reference sampai 1.804.800 kHz dan OPP OC sampai 2.448.000 kHz. OPP 2.448 MHz adalah kenaikan 2% di atas batas 2.400 MHz sebelumnya. Ini adalah daftar frekuensi yang diekspos oleh konfigurasi cpufreq.
 
 **Saat menambah/menghapus OPP CPU:**
 1. Perbarui `qcom,cpufreq-table` pada node tersebut.
@@ -257,7 +257,6 @@ Jangan menyebut konfigurasi stabil sebelum diuji pada perangkat fisik. Keberhasi
 
 - Referensi perubahan OC pada dokumen ini mengacu pada branch `NOCTURNE-LIMITED-OC`.
 - Frekuensi bawaan/reference dan frekuensi OC dipisahkan agar kenaikan mudah dilihat.
-- CPU maksimum 2.448 GHz dan CCI maksimum hasil rasio 979,2 MHz masih berstatus eksperimen; belum dinyatakan stabil sebelum build dan pengujian perangkat.
 - Jangan memasukkan angka tegangan mV yang tidak didukung data PMIC/RPM atau pengukuran aktual.
 - Jangan mencampur level bus bandwidth dengan clock DDR.
 - Jika OPP diubah, audit semua tabel yang terkait: clock source, cpufreq/GPU OPP, voltage corner, regulator limit, bandwidth vote, energy model, dan thermal cooling.
