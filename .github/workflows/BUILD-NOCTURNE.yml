@@ -1658,6 +1658,9 @@ jobs:
           SUSFS: $SUSFS_SUMMARY
           Clang: $CLANG_PROFILE
           HZ: $CONFIG_HZ_VALUE
+          ZRAM: $ZRAM_COMPRESSION
+          I/O Scheduler: $IO_DEFAULT_SCHEDULER
+          TCP Congestion: $TCP_DEFAULT_CONGESTION
           CPU Governor: $CPU_DEFAULT_GOVERNOR
           EOF
             )
