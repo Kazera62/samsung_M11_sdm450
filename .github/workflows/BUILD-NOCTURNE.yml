@@ -356,6 +356,30 @@ jobs:
                       f"Expected one optional SUSFS config line for {feature}, found {count}."
                   )
 
+          # Keep KSU_SUSFS single-sourced: build-ready/action.yml writes this
+          # option once, while patch-susfs/action.yml is responsible for source patches.
+          ksu_susfs_line = re.compile(
+              r'(?m)^ *echo "CONFIG_KSU_SUSFS=y" >> .*?$\n?'
+          )
+          susfs_action, count = ksu_susfs_line.subn("", susfs_action)
+          if count != 1:
+              raise SystemExit(
+                  f"Expected one duplicate CONFIG_KSU_SUSFS writer in patch-susfs action, found {count}."
+              )
+
+          # THREAD_INFO_IN_TASK is already enabled in the Samsung defconfig.
+          # Do not append a second copy from the SUSFS patch action.
+          thread_info_block = re.compile(
+              r'(?m)^ *if grep -q "THREAD_INFO_IN_TASK" "drivers/kernelsu/Kconfig"; then\n'
+              r' *echo "CONFIG_THREAD_INFO_IN_TASK=y" >> [^\n]*\n'
+              r' *fi\n?'
+          )
+          susfs_action, count = thread_info_block.subn("", susfs_action)
+          if count != 1:
+              raise SystemExit(
+                  f"Expected one THREAD_INFO_IN_TASK append block in patch-susfs action, found {count}."
+              )
+
           # Embed the Samsung 4.9 compatibility hunk in this workflow instead
           # of adding a separate patch directory to the kernel source.
           fixed_start = susfs_action.find("      - name: SUSFS Patch Fixed")
