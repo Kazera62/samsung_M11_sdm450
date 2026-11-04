@@ -207,32 +207,26 @@ Supply aktif PM8953 S2 / VDD_CX juga memiliki batas maksimum `RPM_SMD_REGULATOR_
 
 Konfigurasi LDO internal GPU juga terpisah dari pemetaan VDD_CX. Pada file regulator, `qcom,num-ldo-corners = <3>` dan `qcom,ldo-enable-corner-map = <1 1 1 0 0 0 0 0 0>`; artinya LDO internal hanya diaktifkan pada tiga corner pertama. Nilai `qcom,ldo-voltage-ceiling` dan `qcom,ldo-voltage-floor` adalah pengaturan LDO tersebut, bukan tegangan yang boleh langsung diklaim sebagai tegangan OPP 650/700/747 MHz.
 
-### 4. Batas maksimum consumer pada shared VDD_CX
+### 4. Shared VDD_CX vote
 
-Log runtime pada branch ini menunjukkan kegagalan ketika GPU meminta CX corner 8/9:
+Log GPU menunjukkan konflik rentang regulator saat meminta corner 8/9:
 
 ```text
-requested voltage range [416, 512]
-does not fit within previously voted range: [256, 384]
-Restricting voltage, 416-384uV
+requested [416, 512], existing vote [256, 384]
 GFX_LDO: Unable to set CX for corner 8/9
 KGSL: src_clk set freq 700000000 failed: -22
 ```
 
-Ini adalah konflik rentang antar-consumer pada regulator bersama `pm8953_s2_level`. Rentang `[256, 384]` merupakan batas vote consumer yang sedang aktif, bukan bukti bahwa kemampuan fisik rail PM8953 S2 berhenti di level 384. Parent regulator sudah menyediakan level `BINNING` (512).
+GCC VDD_DIG dan WCNSS/Pronto memakai rail `pm8953_s2_level`. Batas maksimum vote TURBO (384) dari consumer tersebut bertabrakan dengan kebutuhan GPU corner 8 (416) dan corner 9 (512).
 
-Perbaikan yang diterapkan pada branch ini:
+Perubahan pada branch ini:
 
-1. **GCC VDD_DIG —** pada `drivers/clk/msm/clock-gcc-8953.c`, setelah regulator `vdd_dig` berhasil diperoleh, `vdd_dig.use_max_uV = true` membuat clock framework memakai `INT_MAX` sebagai batas maksimum vote regulator. Minimum vote GCC tetap mengikuti level yang dibutuhkan clock GCC; yang dihilangkan hanya batas maksimum TURBO (384) yang sebelumnya dapat membatasi consumer lain pada rail S2 yang sama.
-2. **WCNSS / Pronto VDD_CX —** pada node WCNSS di `arch/arm64/boot/dts/samsung/msm8953.dtsi`, tuple `qcom,vddcx-voltage-level` sekarang memakai `NOM / NONE / BINNING`. Minimum nominal tetap NOM (256), minimum low-power tetap NONE (0), dan hanya batas maksimum yang diperlebar dari TURBO (384) menjadi BINNING (512). Ini tidak meminta WCNSS untuk selalu memakai level 512.
+- **`drivers/clk/msm/clock-gcc-8953.c`:** `vdd_dig.use_max_uV = true` menghilangkan batas maksimum vote GCC. Minimum vote clock GCC tetap mengikuti kebutuhan clock.
+- **`arch/arm64/boot/dts/samsung/msm8953.dtsi`:** maksimum `qcom,vddcx-voltage-level` WCNSS diubah dari `TURBO` ke `BINNING`. Minimum `NOM` dan `NONE` tidak berubah.
 
-Kedua perubahan menghapus clamp maksimum consumer yang menghalangi transisi GPU ke corner 8/9. **Tabel GPU tidak diturunkan atau dibatasi:** OPP 700 MHz dan 747 MHz, pemetaan corner 8/9, serta entri clock source GPLL3 tetap dipertahankan. Perubahan ini memperbaiki rentang vote regulator; keberhasilan frekuensi dan stabilitas tetap harus dikonfirmasi pada perangkat fisik.
+GPU OPP, corner map, dan clock source 700/747 MHz tidak diubah. Perubahan hanya memperbaiki batas vote pada rail CX bersama.
 
-**Validasi setelah build dan flash:**
-- Pastikan log tidak lagi menampilkan `Restricting voltage, 416-384uV`, `Unable to set CX for corner 8/9`, atau kegagalan `src_clk` pada 700/747 MHz.
-- Uji transisi GPU pada OPP 700 MHz dan 747 MHz serta beban grafis berkelanjutan; pantau `gpuclk`, `max_gpuclk`, suhu, artefak, hang, dan reboot.
-- Uji Wi-Fi/WCNSS saat boot, reconnect, suspend/resume, serta setelah restart subsystem agar perubahan batas vote Pronto tidak menimbulkan regresi.
-- Periksa ulang regulator summary ketika GPU dan Wi-Fi sama-sama aktif. Build yang berhasil saja belum membuktikan bahwa kedua consumer dapat beroperasi bersamaan dengan stabil.
+**Validasi:** periksa log transisi corner 8/9, uji GPU 700/747 MHz, lalu uji Wi-Fi/WCNSS bersamaan dengan beban GPU. Pastikan tidak ada kegagalan regulator, artefak, hang, atau reboot.
 
 ### 5. Definisi nama level RPM
 
