@@ -224,8 +224,6 @@ Perubahan pada branch ini:
 - **`drivers/clk/msm/clock-gcc-8953.c`:** `vdd_dig.use_max_uV = true` menghilangkan batas maksimum vote GCC. Minimum vote clock GCC tetap mengikuti kebutuhan clock.
 - **`arch/arm64/boot/dts/samsung/msm8953.dtsi`:** maksimum `qcom,vddcx-voltage-level` WCNSS diubah dari `TURBO` ke `BINNING`. Minimum `NOM` dan `NONE` tidak berubah.
 
-GPU OPP, corner map, dan clock source 700/747 MHz tidak diubah. Perubahan hanya memperbaiki batas vote pada rail CX bersama.
-
 **Validasi:** periksa log transisi corner 8/9, uji GPU 700/747 MHz, lalu uji Wi-Fi/WCNSS bersamaan dengan beban GPU. Pastikan tidak ada kegagalan regulator, artefak, hang, atau reboot.
 
 ### 5. Definisi nama level RPM
