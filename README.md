@@ -156,6 +156,8 @@ Tabel OPP aktif pada branch ini:
 | 8 | 133,3 MHz | 1 | LOW_SVS |
 | 9 (idle/XO) | 19,2 MHz | 0 | NONE |
 
+Indeks awal GPU disetel ke 8 (`qcom,initial-pwrlevel = <8>`), yaitu OPP 133,3 MHz pada tabel efektif SDM450.
+
 Pada tiga OPP tertinggi, `qcom,bus-freq`, `qcom,bus-min`, dan `qcom,bus-max` disetel ke level 10. Itu adalah permintaan bus untuk OPP GPU tersebut, bukan pengaturan frekuensi DDR secara langsung.
 
 Ketika menambah OPP GPU:
@@ -224,7 +226,7 @@ Perubahan pada branch ini:
 - **`drivers/clk/msm/clock-gcc-8953.c`:** `vdd_dig.use_max_uV = true` menghilangkan batas maksimum vote GCC. Minimum vote clock GCC tetap mengikuti kebutuhan clock.
 - **`arch/arm64/boot/dts/samsung/msm8953.dtsi`:** maksimum `qcom,vddcx-voltage-level` WCNSS diubah dari `TURBO` ke `BINNING`. Minimum `NOM` dan `NONE` tidak berubah.
 
-**Validasi:** periksa log transisi corner 8/9, uji GPU 700/747 MHz, lalu uji Wi-Fi/WCNSS bersamaan dengan beban GPU. Pastikan tidak ada kegagalan regulator, artefak, hang, atau reboot.
+**Validasi:** periksa log saat GPU berpindah ke corner 8/9. Pastikan request CX level 416/512 diterima tanpa error regulator (`-EINVAL`), lalu uji beban grafis bertahap untuk memeriksa artefak, hang, atau reboot.
 
 ### 5. Definisi nama level RPM
 
