@@ -149,8 +149,12 @@ static inline unsigned int check_ncm_flag(void)
 	return 0;
 }
 
-static inline void knox_collect_conntrack_data(struct nf_conn *, int, int)
+static inline void knox_collect_conntrack_data(struct nf_conn *ct,
+							 int startStop, int where)
 {
+	(void)ct;
+	(void)startStop;
+	(void)where;
 }
 
 static inline bool kfifo_status(void)
@@ -158,8 +162,10 @@ static inline bool kfifo_status(void)
 	return false;
 }
 
-static inline void insert_data_kfifo_kthread(struct knox_socket_metadata *)
+static inline void insert_data_kfifo_kthread(
+					struct knox_socket_metadata *metadata)
 {
+	(void)metadata;
 }
 
 static inline unsigned int check_intermediate_flag(void)
