@@ -131,13 +131,47 @@ struct knox_user_socket_metadata {
 	int   flow_type;
 };
 
-/* The list of function which is being referenced */
+/* The list of functions referenced by the network stack. */
+#if IS_ENABLED(CONFIG_KNOX_NCM)
 extern unsigned int check_ncm_flag(void);
 extern void knox_collect_conntrack_data(struct nf_conn *ct, int startStop, int where);
 extern bool kfifo_status(void);
-extern void insert_data_kfifo_kthread(struct knox_socket_metadata* knox_socket_metadata);
+extern void insert_data_kfifo_kthread(struct knox_socket_metadata *knox_socket_metadata);
 extern unsigned int check_intermediate_flag(void);
 extern unsigned int get_intermediate_timeout(void);
+#else
+/*
+ * Keep Samsung network call sites buildable when Knox NCM is disabled.
+ * NCM is not built in this configuration, so its hooks must be inert.
+ */
+static inline unsigned int check_ncm_flag(void)
+{
+	return 0;
+}
+
+static inline void knox_collect_conntrack_data(struct nf_conn *, int, int)
+{
+}
+
+static inline bool kfifo_status(void)
+{
+	return false;
+}
+
+static inline void insert_data_kfifo_kthread(struct knox_socket_metadata *)
+{
+}
+
+static inline unsigned int check_intermediate_flag(void)
+{
+	return 0;
+}
+
+static inline unsigned int get_intermediate_timeout(void)
+{
+	return 0;
+}
+#endif
 
 /* Debug */
 #define NCM_DEBUG        1
