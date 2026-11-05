@@ -478,21 +478,7 @@ jobs:
               "standalone kernel Clang selector",
           )
           antman_probe_fix = "\n".join([
-              "python3 - <<'PY'",
-              "                from pathlib import Path",
-              "                antman = Path('antman')",
-              "                source = antman.read_text()",
-              "                old = \"ldd --version | head -n1 | grep -oE '[^ ]+$'\"",
-              "                new = \"getconf GNU_LIBC_VERSION | awk '{print $2}'\"",
-              "                if source.count(old) != 2:",
-              "                    raise SystemExit('Unexpected AntMan glibc probe layout; refusing an unsafe edit.')",
-              "                source = source.replace(old, new)",
-              "                warning = 'msg_warn \"Host glibc'",
-              "                if source.count(warning) != 1:",
-              "                    raise SystemExit('Unexpected AntMan glibc warning layout; refusing an unsafe edit.')",
-              "                source = source.replace(warning, 'msg_info \"Host glibc', 1)",
-              "                antman.write_text(source)",
-              "                PY",
+              "                python3 -c \"from pathlib import Path; p=Path('antman'); s=p.read_text(); q=chr(39); old='ldd --version | head -n1 | grep -oE '+q+'[^ ]+$'+q; new='getconf GNU_LIBC_VERSION | sed '+q+'s/glibc //'+q; assert s.count(old)==2; s=s.replace(old,new); marker='msg_warn '+chr(34)+'Host glibc'; assert s.count(marker)==1; s=s.replace(marker,'msg_info '+chr(34)+'Host glibc',1); p.write_text(s)\"",
               '                bash antman -S="$CLANG_NEUTRON_TAG"',
               "                bash antman --patch=glibc",
           ])
@@ -507,6 +493,12 @@ jobs:
               "large-packages: true",
               "large-packages: false",
               "large package cleanup option",
+          )
+          env_text = replace_once(
+              env_text,
+              "swap-storage: true",
+              "swap-storage: false",
+              "empty swap-storage cleanup step",
           )
           env_text = replace_once(
               env_text,
