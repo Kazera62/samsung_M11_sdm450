@@ -3799,7 +3799,6 @@ static int msm_gcc_probe(struct platform_device *pdev)
 		return PTR_ERR(vdd_dig.regulator[0]);
 	}
 
-
 	override_for_8953(pdev);
 
 	 /*Vote for GPLL0 to turn on. Needed by acpuclock. */
