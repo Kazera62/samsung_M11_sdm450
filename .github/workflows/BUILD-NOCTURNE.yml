@@ -99,11 +99,6 @@ on:
           - "250"
           - "300"
           - "1000"
-      section_mismatch_diagnostics:
-        description: "Run a separate verbose section-mismatch diagnostic build (extra compile time)"
-        required: true
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -123,7 +118,6 @@ env:
   ZRAM_COMPRESSION: "${{ inputs.compression_algorithm }}"
   TCP_DEFAULT_CONGESTION: "${{ inputs.tcp_default_congestion }}"
   CONFIG_HZ_VALUE: "${{ inputs.config_hz }}"
-  RUN_SECTION_MISMATCH_DIAGNOSTICS: "${{ inputs.section_mismatch_diagnostics && 'true' || 'false' }}"
 
   # Required for this kernel's Samsung DTB and overlay generation.
   CUSTOM_CMDS: "CLANG_TRIPLE=aarch64-linux-gnu-"
@@ -1481,93 +1475,6 @@ jobs:
         uses: ./.github/workflows/build-process
         env:
           LLVM_IAS: 1
-
-      - name: Diagnose kernel section mismatches (optional)
-        if: env.RUN_SECTION_MISMATCH_DIAGNOSTICS == 'true'
-        shell: bash
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-
-          source_dir="$GITHUB_WORKSPACE/device_kernel"
-          release_out="$source_dir/out"
-          diagnostic_out="$source_dir/out-section-mismatch"
-          diagnostic_log="$RUNNER_TEMP/section-mismatch.log"
-          mkdir -p "$(dirname "$diagnostic_log")"
-          : > "$diagnostic_log"
-
-          test -s "$release_out/.config" || {
-            echo "::error::Release .config is missing; cannot start section-mismatch diagnostics."
-            exit 1
-          }
-
-          rm -rf "$diagnostic_out"
-          mkdir -p "$diagnostic_out"
-          # Clone the completed output tree so generated ARM64 asm headers,
-          # config headers, and build metadata are available to the diagnostic
-          # build. The release output remains untouched.
-          cp -a "$release_out/." "$diagnostic_out/"
-          "$source_dir/scripts/config" --file "$diagnostic_out/.config" \
-            --enable DEBUG_SECTION_MISMATCH \
-            --enable SECTION_MISMATCH_WARN_ONLY
-
-          localversion="-$KERNEL_NAME"
-          if [[ "$ENABLE_NETHUNTER" == "true" ]]; then
-            localversion+="-NH"
-          fi
-          export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/clang-custom/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-
-          # The main build action creates this shim and prepends it to PATH.
-          # A separate diagnostic step must restore that PATH explicitly.
-          host_linker_shim="$GITHUB_WORKSPACE/host-tool-bin/ld"
-          test -x "$host_linker_shim" || {
-            echo "::error::The host linker shim from the main build is missing."
-            exit 1
-          }
-          export PATH="$GITHUB_WORKSPACE/host-tool-bin:$GITHUB_WORKSPACE/clang-custom/bin:$PATH"
-          export CROSS_COMPILE_ARM32="$GITHUB_WORKSPACE/gcc-32/bin/arm-linux-androideabi-"
-
-          common_make_args=(
-            -C "$source_dir"
-            O="$diagnostic_out"
-            ARCH=arm64
-            LLVM_IAS=1
-            HOSTLD=/usr/bin/ld
-            CC="ccache clang"
-            CLANG_TRIPLE=aarch64-linux-gnu-
-            CROSS_COMPILE="$GITHUB_WORKSPACE/gcc-64/bin/aarch64-linux-android-"
-            CROSS_COMPILE_ARM32="$GITHUB_WORKSPACE/gcc-32/bin/arm-linux-androideabi-"
-            DTC_EXT="$source_dir/tools/dtc"
-            CONFIG_BUILD_ARM64_DT_OVERLAY=y
-            LOCALVERSION="$localversion"
-          )
-
-          make "${common_make_args[@]}" olddefconfig
-          grep -Fqx 'CONFIG_DEBUG_SECTION_MISMATCH=y' "$diagnostic_out/.config" || {
-            echo "::error::DEBUG_SECTION_MISMATCH did not survive olddefconfig."
-            exit 1
-          }
-          grep -Fqx 'CONFIG_SECTION_MISMATCH_WARN_ONLY=y' "$diagnostic_out/.config" || {
-            echo "::error::SECTION_MISMATCH_WARN_ONLY did not survive olddefconfig."
-            exit 1
-          }
-
-          set +e
-          make -j"$(nproc --all)" "${common_make_args[@]}" vmlinux 2>&1 | tee "$diagnostic_log"
-          diagnostic_status=${PIPESTATUS[0]}
-          set -e
-
-          echo "Verbose section-mismatch diagnostic build exit code: $diagnostic_status"
-          grep -n -E 'section mismatch|WARNING: modpost' "$diagnostic_log" || true
-          exit "$diagnostic_status"
-
-      - name: Upload section mismatch diagnostic log
-        if: always() && env.RUN_SECTION_MISMATCH_DIAGNOSTICS == 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: section-mismatch-diagnostics
-          path: ${{ runner.temp }}/section-mismatch.log
-          if-no-files-found: warn
 
       - name: Verify compiled NetHunter options
         if: env.ENABLE_NETHUNTER == 'true'

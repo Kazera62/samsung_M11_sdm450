@@ -19,7 +19,8 @@ dump_config()
 	if	pos=`tr "$cf1\n$cf2" "\n$cf2=" < "$1" | grep -abo "^$cf2"`
 	then
 		pos=${pos%%:*}
-		tail -c+$(($pos+8)) "$1" | zcat > $tmp1 2> /dev/null
+		# The decoder closes the pipe when the gzip stream ends; EPIPE from tail is expected.
+		tail -c+$(($pos+8)) "$1" 2>/dev/null | zcat > $tmp1 2> /dev/null
 		if	[ $? != 1 ]
 		then	# exit status must be 0 or 2 (trailing garbage warning)
 			cat $tmp1
@@ -33,7 +34,8 @@ try_decompress()
 	for	pos in `tr "$1\n$2" "\n$2=" < "$img" | grep -abo "^$2"`
 	do
 		pos=${pos%%:*}
-		tail -c+$pos "$img" | $3 > $tmp2 2> /dev/null
+		# A decompressor may stop reading before tail reaches EOF; EPIPE is expected.
+		tail -c+$pos "$img" 2>/dev/null | $3 > $tmp2 2> /dev/null
 		dump_config $tmp2
 	done
 }
