@@ -23,6 +23,10 @@ ccflags-y += -D__CHECK_ENDIAN__
 # override for builds targeting a different Android shipping API level.
 PRODUCT_SHIPPING_API_LEVEL ?= 29
 
+ifeq ($(strip $(PRODUCT_SHIPPING_API_LEVEL)),)
+PRODUCT_SHIPPING_API_LEVEL := 29
+endif
+
 ifeq ($(shell test "$(PRODUCT_SHIPPING_API_LEVEL)" -ge 29 2>/dev/null && echo 1),1)
 DB_VERSION = 17
 else ifeq ($(shell test "$(PRODUCT_SHIPPING_API_LEVEL)" -ge 28 2>/dev/null && echo 1),1)
