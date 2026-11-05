@@ -1529,7 +1529,8 @@ jobs:
             echo "::error::Uncompressed kernel Image is missing; cannot verify embedded config."
             exit 1
           }
-          "$GITHUB_WORKSPACE/device_kernel/scripts/extract-ikconfig" "$image" > "$embedded_config" || {
+          # Run through /bin/sh so validation does not depend on the executable bit.
+          sh "$GITHUB_WORKSPACE/device_kernel/scripts/extract-ikconfig" "$image" > "$embedded_config" || {
             echo "::error::Cannot extract IKCONFIG from the compiled kernel Image."
             exit 1
           }
