@@ -1436,6 +1436,8 @@ jobs:
           release_out="$source_dir/out"
           diagnostic_out="$source_dir/out-section-mismatch"
           diagnostic_log="$RUNNER_TEMP/section-mismatch.log"
+          mkdir -p "$(dirname "$diagnostic_log")"
+          : > "$diagnostic_log"
 
           test -s "$release_out/.config" || {
             echo "::error::Release .config is missing; cannot start section-mismatch diagnostics."
@@ -1454,6 +1456,16 @@ jobs:
             localversion+="-NH"
           fi
           export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/clang-custom/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+          # The main build action creates this shim and prepends it to PATH.
+          # A separate diagnostic step must restore that PATH explicitly.
+          host_linker_shim="$GITHUB_WORKSPACE/host-tool-bin/ld"
+          test -x "$host_linker_shim" || {
+            echo "::error::The host linker shim from the main build is missing."
+            exit 1
+          }
+          export PATH="$GITHUB_WORKSPACE/host-tool-bin:$GITHUB_WORKSPACE/clang-custom/bin:$PATH"
+          export CROSS_COMPILE_ARM32="$GITHUB_WORKSPACE/gcc-32/bin/arm-linux-androideabi-"
 
           common_make_args=(
             -C "$source_dir"
