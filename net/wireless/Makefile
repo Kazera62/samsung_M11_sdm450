@@ -19,9 +19,13 @@ CFLAGS_trace.o := -I$(src)
 
 ccflags-y += -D__CHECK_ENDIAN__
 
-ifeq ($(shell expr $(PRODUCT_SHIPPING_API_LEVEL) \>= 29),1)
+# Galaxy M11 shipped with Android 10 (API level 29). Keep an explicit
+# override for builds targeting a different Android shipping API level.
+PRODUCT_SHIPPING_API_LEVEL ?= 29
+
+ifeq ($(shell test "$(PRODUCT_SHIPPING_API_LEVEL)" -ge 29 2>/dev/null && echo 1),1)
 DB_VERSION = 17
-else ifeq ($(shell expr $(PRODUCT_SHIPPING_API_LEVEL) \>= 28),1)
+else ifeq ($(shell test "$(PRODUCT_SHIPPING_API_LEVEL)" -ge 28 2>/dev/null && echo 1),1)
 DB_VERSION = 16
 else
 DB_VERSION = 13
