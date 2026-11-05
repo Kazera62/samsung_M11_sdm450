@@ -1446,7 +1446,10 @@ jobs:
 
           rm -rf "$diagnostic_out"
           mkdir -p "$diagnostic_out"
-          cp "$release_out/.config" "$diagnostic_out/.config"
+          # Clone the completed output tree so generated ARM64 asm headers,
+          # config headers, and build metadata are available to the diagnostic
+          # build. The release output remains untouched.
+          cp -a "$release_out/." "$diagnostic_out/"
           "$source_dir/scripts/config" --file "$diagnostic_out/.config" \
             --enable DEBUG_SECTION_MISMATCH \
             --enable SECTION_MISMATCH_WARN_ONLY
