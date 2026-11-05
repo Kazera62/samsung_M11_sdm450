@@ -34,7 +34,10 @@ GZFLAGS		:=-9
 KBUILD_CFLAGS	+= $(call cc-option,-fno-dwarf2-cfi-asm)
 
 ifeq ($(cc-name),clang)
-KBUILD_CFLAGS += $(call cc-option,-Wno-vectorizer-no-neon,)
+KBUILD_CFLAGS += $(call try-run,\
+	$(CC) -Werror=unknown-warning-option $(KBUILD_CPPFLAGS) \
+	$(CC_OPTION_CFLAGS) -Wno-vectorizer-no-neon -c -x c /dev/null \
+	-o "$TMP",-Wno-vectorizer-no-neon,)
 endif
 
 # This should work on most of the modern platforms

@@ -417,9 +417,6 @@ static int parser_get_ini_key_value(char *section, char *key, char *value)
 {
 	int i = 0;
 	int ret = -2;
-	int len = 0;
-
-	len = strlen(key);
 
 	for (i = 0; i < g_ini_items; i++) {
 		if (strncmp(section, ilitek_ini_file_data[i].pSectionName, strlen(section)) != 0)
@@ -3370,7 +3367,7 @@ static void mp_test_free(void)
 /* The method to copy results to user depends on what APK needs */
 static void mp_copy_ret_to_apk(char *buf)
 {
-	int i, run = 0;
+	int i;
 
 	if (!buf) {
 		ipio_err("apk buffer is null\n");
@@ -3387,7 +3384,6 @@ static void mp_copy_ret_to_apk(char *buf)
 				ipio_info("Item [%s] data pass\n", tItems[i].desp);
 				buf[i] = 0;
 			}
-			run++;
 		}
 	}
 }

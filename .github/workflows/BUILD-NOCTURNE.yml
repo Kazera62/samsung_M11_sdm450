@@ -1424,6 +1424,8 @@ jobs:
 
       - name: Compile kernel
         uses: ./.github/workflows/build-process
+        env:
+          LLVM_IAS: 1
 
       - name: Diagnose kernel section mismatches (optional)
         if: env.RUN_SECTION_MISMATCH_DIAGNOSTICS == 'true'
@@ -1474,6 +1476,7 @@ jobs:
             -C "$source_dir"
             O="$diagnostic_out"
             ARCH=arm64
+            LLVM_IAS=1
             HOSTLD=/usr/bin/ld
             CC="ccache clang"
             CLANG_TRIPLE=aarch64-linux-gnu-

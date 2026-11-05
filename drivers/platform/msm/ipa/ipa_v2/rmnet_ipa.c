@@ -438,10 +438,40 @@ int copy_ul_filter_rule_to_ipa(struct ipa_install_fltr_rule_req_msg_v01
 		ipa_qmi_ctx->q6_ul_filter_rule[i].filter_hdl =
 			UL_FILTER_RULE_HANDLE_START + i;
 		rule_hdl[i] = ipa_qmi_ctx->q6_ul_filter_rule[i].filter_hdl;
-		ipa_qmi_ctx->q6_ul_filter_rule[i].ip =
-			rule_req->filter_spec_list[i].ip_type;
-		ipa_qmi_ctx->q6_ul_filter_rule[i].action =
-			rule_req->filter_spec_list[i].filter_action;
+		switch (rule_req->filter_spec_list[i].ip_type) {
+		case QMI_IPA_IP_TYPE_V4_V01:
+			ipa_qmi_ctx->q6_ul_filter_rule[i].ip = IPA_IP_v4;
+			break;
+		case QMI_IPA_IP_TYPE_V6_V01:
+			ipa_qmi_ctx->q6_ul_filter_rule[i].ip = IPA_IP_v6;
+			break;
+		case QMI_IPA_IP_TYPE_V4V6_V01:
+			/* Fall through */
+		default:
+			ipa_qmi_ctx->q6_ul_filter_rule[i].ip = IPA_IP_MAX;
+			break;
+		}
+
+		switch (rule_req->filter_spec_list[i].filter_action) {
+		case QMI_IPA_FILTER_ACTION_SRC_NAT_V01:
+			ipa_qmi_ctx->q6_ul_filter_rule[i].action =
+				IPA_PASS_TO_SRC_NAT;
+			break;
+		case QMI_IPA_FILTER_ACTION_DST_NAT_V01:
+			ipa_qmi_ctx->q6_ul_filter_rule[i].action =
+				IPA_PASS_TO_DST_NAT;
+			break;
+		case QMI_IPA_FILTER_ACTION_ROUTING_V01:
+			ipa_qmi_ctx->q6_ul_filter_rule[i].action =
+				IPA_PASS_TO_ROUTING;
+			break;
+		case QMI_IPA_FILTER_ACTION_EXCEPTION_V01:
+			/* Fall through */
+		default:
+			ipa_qmi_ctx->q6_ul_filter_rule[i].action =
+				IPA_PASS_TO_EXCEPTION;
+			break;
+		}
 		if (rule_req->filter_spec_list[i].is_routing_table_index_valid
 			== true)
 			ipa_qmi_ctx->q6_ul_filter_rule[i].rt_tbl_idx =

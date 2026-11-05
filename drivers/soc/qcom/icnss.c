@@ -3554,11 +3554,44 @@ out:
 }
 EXPORT_SYMBOL(icnss_athdiag_write);
 
+static int icnss_driver_mode_to_qmi_mode(
+		enum icnss_driver_mode mode,
+		enum wlfw_driver_mode_enum_v01 *qmi_mode)
+{
+	switch (mode) {
+	case ICNSS_MISSION:
+		*qmi_mode = QMI_WLFW_MISSION_V01;
+		break;
+	case ICNSS_FTM:
+		*qmi_mode = QMI_WLFW_FTM_V01;
+		break;
+	case ICNSS_EPPING:
+		*qmi_mode = QMI_WLFW_EPPING_V01;
+		break;
+	case ICNSS_WALTEST:
+		*qmi_mode = QMI_WLFW_WALTEST_V01;
+		break;
+	case ICNSS_OFF:
+		*qmi_mode = QMI_WLFW_OFF_V01;
+		break;
+	case ICNSS_CCPM:
+		*qmi_mode = QMI_WLFW_CCPM_V01;
+		break;
+	case ICNSS_QVIT:
+		*qmi_mode = QMI_WLFW_QVIT_V01;
+		break;
+	default:
+		return -EINVAL;
+	}
+	return 0;
+}
+
 int icnss_wlan_enable(struct device *dev, struct icnss_wlan_enable_cfg *config,
 		      enum icnss_driver_mode mode,
 		      const char *host_version)
 {
 	struct wlfw_wlan_cfg_req_msg_v01 req;
+	enum wlfw_driver_mode_enum_v01 qmi_mode;
 	u32 i;
 	int ret;
 
@@ -3577,6 +3610,10 @@ int icnss_wlan_enable(struct device *dev, struct icnss_wlan_enable_cfg *config,
 			     penv->state);
 		return -EINVAL;
 	}
+
+	ret = icnss_driver_mode_to_qmi_mode(mode, &qmi_mode);
+	if (ret)
+		return ret;
 
 	icnss_pr_dbg("Mode: %d, config: %p, host_version: %s\n",
 		     mode, config, host_version);
@@ -3635,7 +3672,7 @@ int icnss_wlan_enable(struct device *dev, struct icnss_wlan_enable_cfg *config,
 	if (ret)
 		goto out;
 skip:
-	ret = wlfw_wlan_mode_send_sync_msg(mode);
+	ret = wlfw_wlan_mode_send_sync_msg(qmi_mode);
 out:
 	if (test_bit(SKIP_QMI, &quirks))
 		ret = 0;

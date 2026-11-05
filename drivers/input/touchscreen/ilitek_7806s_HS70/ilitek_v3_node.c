@@ -1397,7 +1397,7 @@ int ili_get_tp_recore_data(bool mcu)
 	u8 buf[8] = {0}, record_case = 0;
 	s8 index;
 	u16 *raw = NULL, *raw_ptr = NULL, frame_len = 0;
-	u32 base_addr = 0x20000, addr, len, *ptr, i, fcnt;
+	u32 base_addr = 0x20000, addr, len, i, fcnt;
 	struct record_state record_stat;
 	bool ice = atomic_read(&ilits->ice_stat);
 
@@ -1421,7 +1421,6 @@ int ili_get_tp_recore_data(bool mcu)
 		ILI_ERR("Failed to allocate packet memory, %ld\n", PTR_ERR(raw));
 		return -1;
 	}
-	ptr = (u32*)raw;
 
 	if (!ice)
 		ili_ice_mode_ctrl(ENABLE, ON);
