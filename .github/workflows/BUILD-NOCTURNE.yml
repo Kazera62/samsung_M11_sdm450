@@ -477,11 +477,30 @@ jobs:
               new_clang_selector,
               "standalone kernel Clang selector",
           )
+          antman_probe_fix = "\n".join([
+              "python3 - <<'PY'",
+              "                from pathlib import Path",
+              "                antman = Path('antman')",
+              "                source = antman.read_text()",
+              "                old = \"ldd --version | head -n1 | grep -oE '[^ ]+$'\"",
+              "                new = \"getconf GNU_LIBC_VERSION | awk '{print $2}'\"",
+              "                if source.count(old) != 2:",
+              "                    raise SystemExit('Unexpected AntMan glibc probe layout; refusing an unsafe edit.')",
+              "                source = source.replace(old, new)",
+              "                warning = 'msg_warn \"Host glibc'",
+              "                if source.count(warning) != 1:",
+              "                    raise SystemExit('Unexpected AntMan glibc warning layout; refusing an unsafe edit.')",
+              "                source = source.replace(warning, 'msg_info \"Host glibc', 1)",
+              "                antman.write_text(source)",
+              "                PY",
+              '                bash antman -S="$CLANG_NEUTRON_TAG"',
+              "                bash antman --patch=glibc",
+          ])
           env_text = replace_once(
               env_text,
               "bash antman -S=10032024",
-              'bash antman -S="$CLANG_NEUTRON_TAG"',
-              "Neutron Clang AntMan release selector",
+              antman_probe_fix,
+              "Neutron Clang selector with SIGPIPE-free glibc detection and compatibility patch",
           )
           env_text = replace_once(
               env_text,
@@ -489,6 +508,20 @@ jobs:
               "large-packages: false",
               "large package cleanup option",
           )
+          env_text = replace_once(
+              env_text,
+              "preinstalled-runtimes: true",
+              "preinstalled-runtimes: true\n          tool-cache: false",
+              "deprecated tool-cache input",
+          )
+          apt_command = re.compile(r"(?m)^([ \t]*)(sudo[ \t]+)?apt(?=[ \t])")
+          env_text, apt_count = apt_command.subn(
+              lambda match: match.group(1) + (match.group(2) or "") + "apt-get",
+              env_text,
+          )
+          if apt_count == 0:
+              raise SystemExit("No plain apt commands found in upstream build-env action.")
+          print(f"Converted {apt_count} plain apt command(s) to apt-get.")
 
           expression_prefix = "$" + "{{"
           newer_marker = 'elif [ "' + expression_prefix + ' env.SYSTEM_VERSION }}" == "newer" ]; then'
@@ -802,6 +835,36 @@ jobs:
 
       - name: Fetch toolchains and kernel source
         uses: ./.github/workflows/build-ready
+
+      - name: Fix BakaSU preinit headers jobserver handling
+        if: inputs.root != 'Non-root' && env.KERNELSU_AUTO_FORK == 'bakasu'
+        shell: bash
+        run: |
+          set -euo pipefail
+          runner_makefile="$GITHUB_WORKSPACE/device_kernel/drivers/kernelsu/tools/code_generation/preinit_runner/preinit_runner.mk"
+          test -s "$runner_makefile" || {
+            echo "::error::BakaSU preinit runner Makefile was not found."
+            exit 1
+          }
+          python3 - "$runner_makefile" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          source = path.read_text()
+          old = '$(shell $(MAKE) -s -C'
+          new = '$(shell env -u MAKEFLAGS -u MFLAGS $(MAKE) -s -j1 -C'
+          if old in source:
+              if source.count(old) != 1:
+                  raise SystemExit("Expected exactly one BakaSU headers_install sub-make.")
+              source = source.replace(old, new, 1)
+              path.write_text(source)
+              print("BakaSU headers_install now runs serially without inheriting stale jobserver descriptors.")
+          elif new in source:
+              print("BakaSU jobserver compatibility change is already present.")
+          else:
+              raise SystemExit("BakaSU preinit runner layout changed; no jobserver edit applied.")
+          PY
 
       - name: Ensure Non-root build has no root integration
         if: inputs.root == 'Non-root'
@@ -1508,7 +1571,7 @@ jobs:
 
       - name: Upload section mismatch diagnostic log
         if: always() && env.RUN_SECTION_MISMATCH_DIAGNOSTICS == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: section-mismatch-diagnostics
           path: ${{ runner.temp }}/section-mismatch.log

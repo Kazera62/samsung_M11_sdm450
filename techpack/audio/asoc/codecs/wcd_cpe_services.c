@@ -2031,7 +2031,7 @@ enum cmi_api_result cmi_send_msg(void *message)
 	if (!msg->payload) {
 		kfree(msg);
 		CPE_SVC_REL_LOCK(&cpe_d.cpe_api_mutex, "cpe_api");
-		return CPE_SVC_NO_MEMORY;
+		return cpe_svc_result_to_cmi_api(CPE_SVC_NO_MEMORY);
 	}
 
 	msg->address = 0;
