@@ -3799,12 +3799,6 @@ static int msm_gcc_probe(struct platform_device *pdev)
 		return PTR_ERR(vdd_dig.regulator[0]);
 	}
 
-	/*
-	 * VDD_DIG shares the PM8953 S2 rail with consumers that may need
-	 * higher CX corners. Keep GCC's minimum vote without imposing
-	 * the VDD_DIG TURBO ceiling on the shared regulator.
-	 */
-	vdd_dig.use_max_uV = true;
 
 	override_for_8953(pdev);
 
