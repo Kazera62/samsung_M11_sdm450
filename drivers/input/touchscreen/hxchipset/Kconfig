@@ -4,7 +4,7 @@
 
 config TOUCHSCREEN_HIMAX_COMMON
         tristate "HIMAX chipset i2c touchscreen"
-		depends on TOUCHSCREEN_HIMAX_CHIPSET
+		depends on TOUCHSCREEN_HIMAX_CHIPSET || TOUCHSCREEN_HIMAX_HS50
 		help
 		This enables support for HIMAX CHIPSET over I2C based touchscreens.
 
