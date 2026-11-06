@@ -609,13 +609,16 @@ jobs:
                       echo "NetHunter disabled: optional mac80211, injection-related USB HID, and external USB Wi-Fi drivers disabled; Android USB gadget retained."
                     fi
 
+                    # Interactive caused a boot-time cpufreq crash; keep it out of the kernel.
+                    ./scripts/config --file "$config" --disable CPU_FREQ_GOV_INTERACTIVE
+
                     # Re-apply CPU governor and timer choices to the final output config
                     # after defconfig and any optional config merges.
                     case "$CPU_DEFAULT_GOVERNOR" in
                       performance|powersave|userspace|ondemand|conservative|schedutil) cpu_gov_upper="$(printf '%s' "$CPU_DEFAULT_GOVERNOR" | tr '[:lower:]' '[:upper:]')" ;;
                       *) echo "::error::Invalid CPU governor selection: $CPU_DEFAULT_GOVERNOR"; exit 1 ;;
                     esac
-                    sed -i -E '/^(CONFIG_CPU_FREQ_DEFAULT_GOV_(PERFORMANCE|POWERSAVE|USERSPACE|ONDEMAND|CONSERVATIVE|INTERACTIVE|SCHEDUTIL)=y|# CONFIG_CPU_FREQ_DEFAULT_GOV_(PERFORMANCE|POWERSAVE|USERSPACE|ONDEMAND|CONSERVATIVE|INTERACTIVE|SCHEDUTIL) is not set)$/d' "$config"
+                    sed -i -E '/^(CONFIG_CPU_FREQ_DEFAULT_GOV_[A-Z0-9_]+=y|# CONFIG_CPU_FREQ_DEFAULT_GOV_[A-Z0-9_]+ is not set)$/d' "$config"
                     printf 'CONFIG_CPU_FREQ_DEFAULT_GOV_%s=y\n' "$cpu_gov_upper" >> "$config"
 
                     case "$CONFIG_HZ_VALUE" in
@@ -635,6 +638,7 @@ jobs:
                         exit 1
                       fi
                     }
+                    require_config "# CONFIG_CPU_FREQ_GOV_INTERACTIVE is not set"
 
                     case "$CPU_DEFAULT_GOVERNOR" in
                       performance|powersave|userspace|ondemand|conservative|schedutil) cpu_gov_upper="$(printf '%s' "$CPU_DEFAULT_GOVERNOR" | tr '[:lower:]' '[:upper:]')" ;;
@@ -1153,6 +1157,12 @@ jobs:
           config_text = config_path.read_text()
           lines = config_text.splitlines()
 
+          interactive_symbol = "CONFIG_CPU_FREQ_GOV_INTERACTIVE"
+          if not declared(config_text, interactive_symbol):
+              fail("Interactive governor option is missing from this branch's defconfig.")
+          if enabled(config_text, interactive_symbol):
+              fail("Interactive governor must remain disabled in this branch's defconfig.")
+
           governor_map = {
               "performance": "PERFORMANCE",
               "powersave": "POWERSAVE",
@@ -1506,6 +1516,10 @@ jobs:
             echo "::error::Generated autoconf.h is missing; cannot verify compiled options."
             exit 1
           }
+          if grep -Fqx '#define CONFIG_CPU_FREQ_GOV_INTERACTIVE 1' "$autoconf"; then
+            echo "::error::Interactive governor unexpectedly reached the compiled kernel."
+            exit 1
+          fi
 
           case "$CPU_DEFAULT_GOVERNOR" in
             performance|powersave|userspace|ondemand|conservative|schedutil) cpu_gov_upper="$(printf '%s' "$CPU_DEFAULT_GOVERNOR" | tr '[:lower:]' '[:upper:]')" ;;
@@ -1532,6 +1546,10 @@ jobs:
           # Run through /bin/sh so validation does not depend on the executable bit.
           sh "$GITHUB_WORKSPACE/device_kernel/scripts/extract-ikconfig" "$image" > "$embedded_config" || {
             echo "::error::Cannot extract IKCONFIG from the compiled kernel Image."
+            exit 1
+          }
+          grep -Fqx '# CONFIG_CPU_FREQ_GOV_INTERACTIVE is not set' "$embedded_config" || {
+            echo "::error::Embedded kernel config does not confirm Interactive governor is disabled."
             exit 1
           }
 
