@@ -265,11 +265,15 @@ static int regulator_check_consumers(struct regulator_dev *rdev,
 		if (!regulator->min_uV && !regulator->max_uV)
 			continue;
 
-		if (init_max_uV < regulator->min_uV
-		    || init_min_uV > regulator->max_uV)
-			rdev_err(rdev, "requested voltage range [%d, %d] does not fit within previously voted range: [%d, %d]\n",
-				init_min_uV, init_max_uV, regulator->min_uV,
-				regulator->max_uV);
+		if (init_max_uV < regulator->min_uV ||
+		    init_min_uV > regulator->max_uV)
+			rdev_err(rdev,
+				 "consumer %s supply %s voted [%d, %d]; "
+				 "request [%d, %d] does not overlap\n",
+				 regulator->dev ? dev_name(regulator->dev) : "unknown",
+				 regulator->supply_name ? regulator->supply_name : "unknown",
+				 regulator->min_uV, regulator->max_uV,
+				 init_min_uV, init_max_uV);
 
 		if (*max_uV > regulator->max_uV)
 			*max_uV = regulator->max_uV;
