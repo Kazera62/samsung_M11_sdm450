@@ -209,26 +209,7 @@ Supply aktif PM8953 S2 / VDD_CX juga memiliki batas maksimum `RPM_SMD_REGULATOR_
 
 Konfigurasi LDO internal GPU juga terpisah dari pemetaan VDD_CX. Pada file regulator, `qcom,num-ldo-corners = <3>` dan `qcom,ldo-enable-corner-map = <1 1 1 0 0 0 0 0 0>`; artinya LDO internal hanya diaktifkan pada tiga corner pertama. Nilai `qcom,ldo-voltage-ceiling` dan `qcom,ldo-voltage-floor` adalah pengaturan LDO tersebut, bukan tegangan yang boleh langsung diklaim sebagai tegangan OPP 650/700/747 MHz.
 
-### 4. Shared VDD_CX vote
-
-Log GPU menunjukkan konflik rentang regulator saat meminta corner 8/9:
-
-```text
-requested [416, 512], existing vote [256, 384]
-GFX_LDO: Unable to set CX for corner 8/9
-KGSL: src_clk set freq 700000000 failed: -22
-```
-
-GCC VDD_DIG dan WCNSS/Pronto memakai rail `pm8953_s2_level`. Batas maksimum vote TURBO (384) dari consumer tersebut bertabrakan dengan kebutuhan GPU corner 8 (416) dan corner 9 (512).
-
-Perubahan pada branch ini:
-
-- **`drivers/clk/msm/clock-gcc-8953.c`:** `vdd_dig.use_max_uV = true` menghilangkan batas maksimum vote GCC. Minimum vote clock GCC tetap mengikuti kebutuhan clock.
-- **`arch/arm64/boot/dts/samsung/msm8953.dtsi`:** maksimum `qcom,vddcx-voltage-level` WCNSS diubah dari `TURBO` ke `BINNING`. Minimum `NOM` dan `NONE` tidak berubah.
-
-**Validasi:** periksa log saat GPU berpindah ke corner 8/9. Pastikan request CX level 416/512 diterima tanpa error regulator (`-EINVAL`), lalu uji beban grafis bertahap untuk memeriksa artefak, hang, atau reboot.
-
-### 5. Definisi nama level RPM
+### 4. Definisi nama level RPM
 
 **File referensi:** `include/dt-bindings/regulator/qcom,rpm-smd-regulator.h`
 
