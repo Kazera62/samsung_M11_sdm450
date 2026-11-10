@@ -68,6 +68,9 @@ Required properties:
 
 Optional properties:
 - vdd_dig-supply:       The digital logic rail supply.
+- qcom,vdd-dig-max-level: Optional upper bound for vdd_dig-supply requests.
+                         On RPM voltage-level rails, this is an RPM level
+                         code (for example, BINNING = 512), not a uV value.
 - <pll>_dig-supply:     Some PLLs might have separate digital supply on some
                         targets. These properties will be provided on those
                         targets for specific PLLs.
