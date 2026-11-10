@@ -77,6 +77,8 @@ static inline void clk_debug_print_hw(struct clk *clk, struct seq_file *f) {}
  * @skip_handoff: do not vote for the max possible voltage during init
  * @use_max_uV: use INT_MAX for max_uV when calling regulator_set_voltage
  *           This is useful when different vdd_class share same regulator.
+ * @max_vdd_level: Optional RPM-level upper bound for regulator requests.
+ *           Used only by voltage-level based regulator classes.
  * @cur_level: the currently set voltage level
  * @lock: lock to protect this struct
  */
@@ -91,6 +93,7 @@ struct clk_vdd_class {
 	int num_levels;
 	bool skip_handoff;
 	bool use_max_uV;
+	int max_vdd_level;
 	unsigned long cur_level;
 	struct mutex lock;
 };
