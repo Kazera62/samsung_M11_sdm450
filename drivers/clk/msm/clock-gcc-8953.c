@@ -3773,6 +3773,7 @@ static int msm_gcc_probe(struct platform_device *pdev)
 	struct resource *res;
 	int ret;
 	u32 regval;
+	u32 vdd_dig_max_level;
 
 	ret = vote_bimc(&bimc_clk, INT_MAX);
 	if (ret < 0)
@@ -3797,6 +3798,25 @@ static int msm_gcc_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev,
 					"Unable to get vdd_dig regulator!!!\n");
 		return PTR_ERR(vdd_dig.regulator[0]);
+	}
+
+	/*
+	 * GCC and the GPU GFX-LDO can share VDD_CX on SDM450. Preserve GCC's
+	 * per-clock minimum vote, but allow the GPU's higher CX corners.
+	 * This property is expressed in RPM level codes, not microvolts.
+	 */
+	vdd_dig.max_vdd_level = 0;
+	if (!of_property_read_u32(pdev->dev.of_node,
+			  "qcom,vdd-dig-max-level", &vdd_dig_max_level)) {
+		if (vdd_dig_max_level < RPM_REGULATOR_LEVEL_TURBO ||
+		    vdd_dig_max_level > RPM_REGULATOR_LEVEL_BINNING) {
+			dev_err(&pdev->dev, "Invalid vdd-dig max RPM level %u\n",
+				vdd_dig_max_level);
+			return -EINVAL;
+		}
+		vdd_dig.max_vdd_level = vdd_dig_max_level;
+		dev_info(&pdev->dev, "vdd_dig max RPM level: %u\n",
+			 vdd_dig_max_level);
 	}
 
 	override_for_8953(pdev);
