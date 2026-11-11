@@ -615,7 +615,7 @@ jobs:
                       performance|powersave|userspace|ondemand|conservative|schedutil) cpu_gov_upper="$(printf '%s' "$CPU_DEFAULT_GOVERNOR" | tr '[:lower:]' '[:upper:]')" ;;
                       *) echo "::error::Invalid CPU governor selection: $CPU_DEFAULT_GOVERNOR"; exit 1 ;;
                     esac
-                    sed -i -E '/^(CONFIG_CPU_FREQ_DEFAULT_GOV_(PERFORMANCE|POWERSAVE|USERSPACE|ONDEMAND|CONSERVATIVE|INTERACTIVE|SCHEDUTIL)=y|# CONFIG_CPU_FREQ_DEFAULT_GOV_(PERFORMANCE|POWERSAVE|USERSPACE|ONDEMAND|CONSERVATIVE|INTERACTIVE|SCHEDUTIL) is not set)$/d' "$config"
+                    sed -i -E '/^(CONFIG_CPU_FREQ_DEFAULT_GOV_(PERFORMANCE|POWERSAVE|USERSPACE|ONDEMAND|CONSERVATIVE|SCHEDUTIL)=y|# CONFIG_CPU_FREQ_DEFAULT_GOV_(PERFORMANCE|POWERSAVE|USERSPACE|ONDEMAND|CONSERVATIVE|SCHEDUTIL) is not set)$/d' "$config"
                     printf 'CONFIG_CPU_FREQ_DEFAULT_GOV_%s=y\n' "$cpu_gov_upper" >> "$config"
 
                     case "$CONFIG_HZ_VALUE" in
