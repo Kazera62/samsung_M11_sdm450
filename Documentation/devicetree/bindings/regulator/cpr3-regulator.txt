@@ -453,6 +453,15 @@ Platform independent properties:
 		    the interpolated open-loop voltage for each corner as the
 		    CPR ceiling voltage for each corner.
 
+- qcom,cpr-scaled-open-loop-voltage-as-ceiling-except-last-corner
+	Usage:      optional; only meaningful if
+		    qcom,cpr-scaled-open-loop-voltage-as-ceiling is specified
+	Value type: <empty>
+	Definition: Preserve the explicit qcom,cpr-voltage-ceiling value for
+		    the final virtual corner instead of replacing it with the
+		    interpolated open-loop voltage. Earlier corners retain the
+		    behavior selected by qcom,cpr-scaled-open-loop-voltage-as-ceiling.
+
 - qcom,cpr-open-loop-voltage-fuse-adjustment
 	Usage:      optional
 	Value type: <prop-encoded-array>

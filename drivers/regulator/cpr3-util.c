@@ -1331,12 +1331,22 @@ int cpr3_limit_open_loop_voltages(struct cpr3_regulator *vreg)
 void cpr3_open_loop_voltage_as_ceiling(struct cpr3_regulator *vreg)
 {
 	int i;
+	int corner_count = vreg->corner_count;
 
 	if (!of_property_read_bool(vreg->of_node,
 				"qcom,cpr-scaled-open-loop-voltage-as-ceiling"))
 		return;
 
-	for (i = 0; i < vreg->corner_count; i++)
+	/*
+	 * The optional final experimental corner keeps its explicit DT ceiling.
+	 * All established corners retain their scaled-open-loop ceiling.
+	 */
+	if (of_property_read_bool(vreg->of_node,
+			"qcom,cpr-scaled-open-loop-voltage-as-ceiling-except-last-corner")
+		&& corner_count > 0)
+		corner_count--;
+
+	for (i = 0; i < corner_count; i++)
 		vreg->corner[i].ceiling_volt
 			= vreg->corner[i].open_loop_volt;
 }

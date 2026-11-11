@@ -26,6 +26,7 @@
 #include <linux/iocontext.h>
 #include <linux/key.h>
 #include <linux/binfmts.h>
+#include <linux/devfreq_boost.h>
 #include <linux/mman.h>
 #include <linux/mmu_notifier.h>
 #include <linux/fs.h>
@@ -2100,6 +2101,10 @@ long _do_fork(unsigned long clone_flags,
 	struct task_struct *p;
 	int trace = 0;
 	long nr;
+
+	/* Cover the DDR devfreq governor's polling delay on app launches. */
+	if (task_is_zygote(current))
+		devfreq_boost_kick_max(50);
 
 	/*
 	 * Determine whether and which event to report to ptracer.  When

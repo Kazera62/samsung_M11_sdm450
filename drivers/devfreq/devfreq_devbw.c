@@ -25,6 +25,8 @@
 #include <linux/mutex.h>
 #include <linux/interrupt.h>
 #include <linux/devfreq.h>
+#include <linux/devfreq_boost.h>
+#include <linux/string.h>
 #include <linux/of.h>
 #include <trace/events/power.h>
 #include <linux/msm-bus.h>
@@ -211,12 +213,19 @@ int devfreq_add_devbw(struct device *dev)
 		return PTR_ERR(d->df);
 	}
 
+	/* Only boost the CPU-to-DDR bus, not the minimum-bandwidth client. */
+	if (dev->of_node && !strcmp(dev->of_node->name, "qcom,cpubw"))
+		devfreq_register_boost_device(d->df);
+
 	return 0;
 }
 
 int devfreq_remove_devbw(struct device *dev)
 {
 	struct dev_data *d = dev_get_drvdata(dev);
+
+	if (dev->of_node && !strcmp(dev->of_node->name, "qcom,cpubw"))
+		devfreq_unregister_boost_device(d->df);
 
 	msm_bus_scale_unregister_client(d->bus_client);
 	devfreq_remove_device(d->df);

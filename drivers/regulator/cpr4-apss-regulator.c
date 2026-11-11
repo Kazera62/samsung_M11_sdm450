@@ -855,19 +855,9 @@ static int cpr4_apss_calculate_open_loop_voltages(struct cpr3_regulator *vreg)
 		goto done;
 	}
 
-	/* Determine highest corner mapped to each fuse corner */
-	j = vreg->fuse_corner_count - 1;
-	for (i = vreg->corner_count - 1; i >= 0; i--) {
-		if (vreg->corner[i].cpr_fuse_corner == j) {
-			fmax_corner[j] = i;
-			j--;
-		}
-	}
-	if (j >= 0) {
-		cpr3_err(vreg, "invalid fuse corner mapping\n");
-		rc = -EINVAL;
-		goto done;
-	}
+	/* Preserve the explicit fuse Fmax map as the calibration anchor. */
+	for (i = 0; i < vreg->fuse_corner_count; i++)
+		fmax_corner[i] = vreg->fuse_corner_map[i];
 
 	/*
 	 * Interpolation is not possible for corners mapped to the lowest fuse
@@ -888,6 +878,12 @@ static int cpr4_apss_calculate_open_loop_voltages(struct cpr3_regulator *vreg)
 				freq_low, volt_low, freq_high, volt_high,
 				vreg->corner[j].proc_freq);
 	}
+
+	/* Extend virtual OPPs above the final fuse anchor from its voltage. */
+	for (j = fmax_corner[vreg->fuse_corner_count - 1] + 1;
+	     j < vreg->corner_count; j++)
+		vreg->corner[j].open_loop_volt
+			= vreg->corner[j - 1].open_loop_volt;
 
 done:
 	if (rc == 0) {
@@ -1105,19 +1101,9 @@ static int cpr4_apss_calculate_target_quotients(struct cpr3_regulator *vreg)
 				vreg, volt_adjust, volt_adjust_fuse, ro_scale);
 	}
 
-	/* Determine highest corner mapped to each fuse corner */
-	j = vreg->fuse_corner_count - 1;
-	for (i = vreg->corner_count - 1; i >= 0; i--) {
-		if (vreg->corner[i].cpr_fuse_corner == j) {
-			fmax_corner[j] = i;
-			j--;
-		}
-	}
-	if (j >= 0) {
-		cpr3_err(vreg, "invalid fuse corner mapping\n");
-		rc = -EINVAL;
-		goto done;
-	}
+	/* Preserve the explicit fuse Fmax map as the calibration anchor. */
+	for (i = 0; i < vreg->fuse_corner_count; i++)
+		fmax_corner[i] = vreg->fuse_corner_map[i];
 
 	/*
 	 * Interpolation is not possible for corners mapped to the lowest fuse
@@ -1188,6 +1174,12 @@ static int cpr4_apss_calculate_target_quotients(struct cpr3_regulator *vreg)
 				freq_low, quot_low[i], freq_high, quot_high[i],
 				vreg->corner[j].proc_freq);
 	}
+
+	/* Extend virtual OPPs using the final fused target quotient. */
+	for (j = fmax_corner[vreg->fuse_corner_count - 1] + 1;
+	     j < vreg->corner_count; j++)
+		vreg->corner[j].target_quot[ro]
+			= vreg->corner[j - 1].target_quot[ro];
 
 	/* Perform per-corner target quotient adjustment */
 	for (i = 0; i < vreg->corner_count; i++) {

@@ -243,6 +243,14 @@ config QCOM_DEVFREQ_DEVBW
 	  agnostic interface to so that some of the devfreq governors can be
 	  shared across SoCs.
 
+config DEVFREQ_BOOST
+	bool "Temporary devfreq boost support"
+	depends on PM_DEVFREQ && QCOM_DEVFREQ_DEVBW
+	default n
+	help
+	  Allow latency-sensitive kernel events to temporarily raise the
+	  CPU-to-DDR bandwidth devfreq device to its highest supported level.
+
 config SPDM_SCM
 	bool "QTI SPDM SCM based call support"
 	depends on DEVFREQ_SPDM

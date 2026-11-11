@@ -282,6 +282,10 @@ int update_devfreq(struct devfreq *devfreq)
 		freq = devfreq->min_freq;
 		flags &= ~DEVFREQ_FLAG_LEAST_UPPER_BOUND; /* Use GLB */
 	}
+	if (devfreq->boost_min_freq && freq < devfreq->boost_min_freq) {
+		freq = devfreq->boost_min_freq;
+		flags &= ~DEVFREQ_FLAG_LEAST_UPPER_BOUND; /* Use GLB */
+	}
 	if (devfreq->max_freq && freq > devfreq->max_freq) {
 		freq = devfreq->max_freq;
 		flags |= DEVFREQ_FLAG_LEAST_UPPER_BOUND; /* Use LUB */

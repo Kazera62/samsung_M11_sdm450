@@ -148,6 +148,7 @@ struct devfreq_governor {
  *		touch this.
  * @min_freq:	Limit minimum frequency requested by user (0: none)
  * @max_freq:	Limit maximum frequency requested by user (0: none)
+ * @boost_min_freq:	Temporary minimum frequency used by short boosts (0: none)
  * @stop_polling:	 devfreq polling status of a device.
  * @total_trans:	Number of devfreq transitions
  * @trans_table:	Statistics of devfreq transitions
@@ -182,6 +183,7 @@ struct devfreq {
 
 	unsigned long min_freq;
 	unsigned long max_freq;
+	unsigned long boost_min_freq;	/* Temporary devfreq boost floor */
 	bool stop_polling;
 
 	/* information for device frequency transition */
@@ -199,6 +201,7 @@ struct devfreq_freqs {
 };
 
 #if defined(CONFIG_PM_DEVFREQ)
+extern int update_devfreq(struct devfreq *devfreq);
 extern struct devfreq *devfreq_add_device(struct device *dev,
 				  struct devfreq_dev_profile *profile,
 				  const char *governor_name,
