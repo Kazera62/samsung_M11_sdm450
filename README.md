@@ -211,39 +211,56 @@ Tabel khusus SDM450 dipilih ketika node clock memakai compatible `qcom,gcc-gfx-s
 
 Angka source rate dan divider harus cocok dengan kemampuan PLL serta konfigurasi clock hardware. Menambah OPP di device tree tanpa menambah entri clock source yang valid dapat membuat frekuensi tidak tersedia atau gagal disetel.
 
-### 3. Corner VDD_CX dan batas regulator
+### 3. Pemetaan GPU ke level tegangan VDD_CX
 
 **File:** `arch/arm64/boot/dts/samsung/msm8953-regulator.dtsi`
 
-Cari node GPU regulator `gfx_vreg_corner` dan properti:
-- `qcom,vdd-cx-corner-map`
-- `qcom,num-corners`
-- `qcom,ldo-enable-corner-map`
+Alur pemetaan GPU terdiri dari dua tahap:
 
-Pemetaan GPU tertinggi pada branch `NOCTURNE-LIMITED-OC`:
-- Logical corner 7 / 650 MHz → `RPM_SMD_REGULATOR_LEVEL_TURBO` (384)
-- Logical corner 8 / 700 MHz → `RPM_SMD_REGULATOR_LEVEL_TURBO` (384)
-- Logical corner 9 / 747 MHz → `RPM_SMD_REGULATOR_LEVEL_TURBO` (384)
-- Logical corner 10 / 824 MHz → `RPM_SMD_REGULATOR_LEVEL_TURBO` (384)
+1. Node `&clock_gcc_gfx` di `sdm450.dtsi` memetakan frekuensi GPU ke *logical corner* melalui `qcom,gfxfreq-corner`.
+2. Node `gfx_vreg_corner` di file regulator menerjemahkan logical corner tersebut menjadi level request RPM melalui `qcom,vdd-cx-corner-map`.
 
-Tabel `qcom,gfxfreq-corner` sekarang memilih logical corner 7/8/9/10 secara berurutan untuk 650/700/747/824 MHz. Tabel `qcom,vdd-cx-corner-map` menerjemahkan keempat logical corner tersebut ke RPM TURBO (384). Nomor logical corner tetap berbeda untuk mempertahankan tingkat corner terpisah, tetapi request RPM-nya sama.
+Untuk OPP GPU tertinggi, pemetaannya adalah:
 
-Node `pm8953_s2_level` tetap mencantumkan BINNING sebagai batas maksimum regulator. Properti batas maksimum tersebut bukan vote aktif yang otomatis meminta BINNING.
+| GPU frequency | Logical corner | RPM voltage-level request |
+|---:|---:|---|
+| 650 MHz | 7 | `RPM_SMD_REGULATOR_LEVEL_TURBO` (384) |
+| 700 MHz | 8 | `RPM_SMD_REGULATOR_LEVEL_TURBO` (384) |
+| 747 MHz | 9 | `RPM_SMD_REGULATOR_LEVEL_TURBO` (384) |
+| 824 MHz | 10 | `RPM_SMD_REGULATOR_LEVEL_TURBO` (384) |
 
-**Penting: 384, 416, dan 512 bukan nilai volt dan bukan mV.** File regulator menggunakan `qcom,use-voltage-level`; angka tersebut adalah kode level request Qualcomm RPM. Tegangan fisik yang diterapkan bergantung pada implementasi RPM/PMIC dan firmware perangkat. Source ini tidak membuktikan tegangan aktual dalam mV pada GPU 650, 700, 747, atau 824 MHz.
+Jadi, logical corner 7 sampai 10 memang berbeda untuk membedakan tingkat OPP GPU, tetapi keempatnya meminta level rail RPM yang sama, yaitu **TURBO (384)**. Pemetaan ini tertulis secara statis pada device tree; jangan mengartikannya sebagai pembacaan atau pemilihan GPU silicon speed-bin secara otomatis.
 
-Konfigurasi LDO internal GPU juga terpisah dari pemetaan VDD_CX. Pada file regulator, `qcom,num-corners = <10>`, `qcom,num-ldo-corners = <3>`, dan `qcom,ldo-enable-corner-map = <1 1 1 0 0 0 0 0 0 0>`; artinya tabel regulator menyediakan logical corner 1–10, sedangkan LDO internal hanya diaktifkan pada tiga corner pertama. Batas `regulator-min-microvolt = <1>` dan `regulator-max-microvolt = <10>` juga harus mencakup semua selector corner; nilai maksimum dinaikkan ke 10 agar logical corner 10 tidak ditolak oleh constraint regulator. Nilai `qcom,ldo-voltage-ceiling` dan `qcom,ldo-voltage-floor` adalah pengaturan LDO tersebut, bukan tegangan yang boleh langsung diklaim sebagai tegangan OPP 650/700/747/824 MHz.
+### 4. Batas maksimum rail bukan level request GPU
 
-### 4. Definisi nama level RPM
+**File:** `arch/arm64/boot/dts/samsung/msm8953-regulator.dtsi`
 
-**File referensi:** `include/dt-bindings/regulator/qcom,rpm-smd-regulator.h`
+Node `pm8953_s2_level` menggunakan `qcom,use-voltage-level` dan menetapkan:
 
-Definisi level RPM yang masih tersedia di source:
+- Minimum: `RPM_SMD_REGULATOR_LEVEL_RETENTION` (16)
+- Maksimum: `RPM_SMD_REGULATOR_LEVEL_BINNING` (512)
+
+Nilai BINNING (512) di sini adalah **batas maksimum level request yang diizinkan pada regulator S2**, bukan request yang otomatis dipakai GPU. Request aktif untuk logical corner GPU 7, 8, 9, dan 10 tetap TURBO (384), sesuai isi `qcom,vdd-cx-corner-map`.
+
+Definisi level RPM pada `include/dt-bindings/regulator/qcom,rpm-smd-regulator.h`:
+
 - `RPM_SMD_REGULATOR_LEVEL_TURBO` = 384
 - `RPM_SMD_REGULATOR_LEVEL_TURBO_NO_CPR` = 416
 - `RPM_SMD_REGULATOR_LEVEL_BINNING` = 512
 
-Konstanta 416 dan 512 tetap tersedia untuk regulator atau consumer lain. OPP GPU 650, 700, 747, dan 824 MHz pada branch `NOCTURNE-LIMITED-OC` semuanya diarahkan ke RPM TURBO (384). Angka-angka ini adalah kode level RPM, bukan nilai mV atau skala tegangan linear.
+Ketiga angka tersebut adalah **kode level RPM**, bukan tegangan dalam mV dan bukan skala tegangan linear. Pada mapping GPU branch ini, level 416 dan 512 tidak dipilih oleh empat OPP tertinggi tersebut.
+
+### 5. Konfigurasi internal GPU LDO
+
+Node `gfx_vreg_corner` juga mengatur LDO internal GPU. Konfigurasi yang tertulis saat ini:
+
+- `qcom,num-corners = <10>`
+- `qcom,num-ldo-corners = <3>`
+- `qcom,ldo-enable-corner-map = <1 1 1 0 0 0 0 0 0 0>`
+
+Artinya, tabel regulator memiliki 10 logical corner, sedangkan LDO internal diaktifkan hanya pada tiga corner pertama sesuai enable map. Properti `regulator-min-microvolt = <1>` dan `regulator-max-microvolt = <10>` pada node ini merupakan rentang selector logical corner yang digunakan driver, bukan rentang tegangan fisik 1–10 µV.
+
+Nilai `qcom,ldo-voltage-ceiling` dan `qcom,ldo-voltage-floor` adalah parameter tegangan LDO internal dalam µV. Keduanya merupakan pengaturan LDO dan tidak boleh langsung dianggap sebagai tegangan VDD_CX aktual pada OPP GPU 650, 700, 747, atau 824 MHz.
 
 ## Zygote DDR bandwidth boost
 
