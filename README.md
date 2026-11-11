@@ -273,12 +273,12 @@ Fitur ini memberi dorongan bandwidth CPU-to-DDR singkat saat Android Zygote memb
 - `drivers/devfreq/devfreq_boost.c` menetapkan `boost_min_freq` ke level tertinggi yang tersedia selama 50 ms, lalu menghapus boost dan mengembalikan kendali ke governor Devfreq.
 - `CONFIG_DEVFREQ_BOOST=y` mengaktifkan fitur melalui `a11q_open_defconfig`.
 
-**Makna pengamatan:** ketika aplikasi dibuka, FKM dapat memperlihatkan permintaan bandwidth naik ke level tertinggi; setelah 50 ms, boost sementara dilepas dan nilai dapat turun mengikuti governor serta beban aktual. Ini sesuai dengan desain. Jika aktivitas aplikasi masih membutuhkan bandwidth tinggi, governor tetap dapat mempertahankan level yang lebih tinggi.
+**Makna pengamatan:** ketika aplikasi dibuka, aplikasi pemantauan sistem dapat memperlihatkan permintaan bandwidth naik ke level tertinggi; setelah 50 ms, boost sementara dilepas dan nilai dapat turun mengikuti governor serta beban aktual. Ini sesuai dengan desain. Jika aktivitas aplikasi masih membutuhkan bandwidth tinggi, governor tetap dapat mempertahankan level yang lebih tinggi.
 
 Fitur ini mengubah **vote bandwidth bus CPU-to-DDR**, bukan kapasitas RAM, bukan tabel OPP/clock/tegangan DDR, dan bukan overclock RAM. Angka maksimum pada aplikasi pemantau adalah indikasi level permintaan bus/devfreq; jangan langsung mengartikannya sebagai clock fisik chip RAM.
 ## Pengujian pada perangkat
 
-Source menunjukkan konfigurasi yang diminta kernel. Pada perangkat yang telah diuji, kernel berhasil boot dan pengujian beban CPU/GPU mencapai OPP maksimum; FKM juga menunjukkan pola DDR boost naik ketika aplikasi dibuka lalu turun setelah boost berakhir. Hasil ini adalah pengujian pada satu unit, bukan jaminan untuk seluruh unit perangkat.
+Source menunjukkan konfigurasi yang diminta kernel. Pada perangkat yang telah diuji, kernel berhasil boot dan pengujian beban CPU/GPU mencapai OPP maksimum; pemantauan sistem juga menunjukkan pola DDR boost naik ketika aplikasi dibuka lalu turun setelah boost berakhir. Hasil ini adalah pengujian pada satu unit, bukan jaminan untuk seluruh unit perangkat.
 
 Contoh pemeriksaan melalui Termux/root:
 
