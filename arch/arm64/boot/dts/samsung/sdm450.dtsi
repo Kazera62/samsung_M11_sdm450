@@ -265,11 +265,6 @@
 	efficiency = <1024>;
 };
 
-&clock_gcc {
-	/* RPM_REGULATOR_LEVEL_BINNING (512), not a microvolt value. */
-	qcom,vdd-dig-max-level = <512>;
-};
-
 &clock_gcc_gfx {
 	compatible = "qcom,gcc-gfx-sdm450";
 	qcom,gfxfreq-corner =
