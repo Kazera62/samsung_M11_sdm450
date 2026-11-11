@@ -4141,7 +4141,6 @@ static int msm_gcc_gfx_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-
 	ret = of_msm_clock_register(pdev->dev.of_node, msm_clocks_gcc_gfx,
 				ARRAY_SIZE(msm_clocks_gcc_gfx));
 
