@@ -23,7 +23,7 @@ on:
           - ZyC Clang 12.0.1
           - Proton Clang
       root:
-        description: "Root implementation"
+        description: "Root integration mode"
         required: true
         type: choice
         default: Non-root
@@ -54,7 +54,7 @@ on:
           - userspace
           - powersave
       io_default_scheduler:
-        description: "Block I/O scheduler: flash-oriented low overhead first; noop is the default"
+        description: "Block I/O scheduler"
         required: true
         type: choice
         default: noop
@@ -63,7 +63,7 @@ on:
           - deadline
           - cfq
       compression_algorithm:
-        description: "zRAM compressor: speed-first order; lz4 is the default"
+        description: "zRAM compression algorithm"
         required: true
         type: choice
         default: lz4
@@ -73,7 +73,7 @@ on:
           - zstd
           - lz4hc
       tcp_default_congestion:
-        description: "TCP congestion control: general-purpose performance first; BBR is the default (best choice varies by network)"
+        description: "TCP congestion control algorithm"
         required: true
         type: choice
         default: bbr
@@ -149,7 +149,7 @@ env:
   # Non-empty selector activates the inline Samsung Linux 4.9 compatibility adjustment.
   SUSFS_PATCH_FIXED: "${{ inputs.root == 'BakaSU + SUSFS' && 'inline_samsung_49_compat' || '' }}"
 
-  # Always use the user's own AnyKernel3 repository.
+  # AnyKernel3 packaging source.
   AK3_SOURCE: "https://github.com/Kazera62/AnyKernel3.git"
   AK3_BRANCH: "master"
   PACK_METHOD: "AnyKernel3"
@@ -195,7 +195,6 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: JackA1ltman/NonGKI_Kernel_Build_2nd
-          # Follow upstream mainline so framework updates are used on each run.
           ref: mainline
           persist-credentials: false
           fetch-depth: 1
