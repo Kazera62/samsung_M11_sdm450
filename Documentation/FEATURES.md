@@ -1,12 +1,10 @@
 # Kernel features
 
-Only features with an implementation in this source tree are listed here.
-
 ## Dynamic Fsync
 
 - Kconfig: `CONFIG_DYNAMIC_FSYNC=y`
 - Defconfig: `arch/arm64/configs/a11q_open_defconfig`
-- Purpose: runtime control of filesystem sync behavior through the Dynamic Fsync implementation.
+- Runtime control of filesystem sync behavior.
 
 ## Zygote CPU-to-DDR bandwidth boost
 
@@ -20,11 +18,11 @@ Files:
 
 The fork path calls `devfreq_boost_kick_max(50)`. The boost sets `boost_min_freq` to the highest frequency in the CPU bandwidth device's table, then clears it after 50 ms. The normal Devfreq governor controls the device after the boost expires.
 
-The minimum-bandwidth client (`qcom,mincpubw`) is not registered for this boost. This changes an interconnect bandwidth request; it does not change DDR frequency, timings, or memory capacity.
+The `qcom,mincpubw` client is not registered for this boost. This changes an interconnect bandwidth request; it does not change DDR frequency, timings, or memory capacity.
 
-## CPU frequency and Devfreq
+## CPUFreq and Devfreq
 
-Relevant defconfig options include:
+Relevant defconfig options:
 
 - `CONFIG_CPU_FREQ=y`
 - `CONFIG_CPU_BOOST=y`
@@ -33,17 +31,16 @@ Relevant defconfig options include:
 - `CONFIG_DEVFREQ_BOOST=y`
 - `CONFIG_QCOM_DEVFREQ_DEVBW=y`
 
-Available governors and defaults can be overridden by the GitHub Actions build inputs. See [BUILD.md](BUILD.md).
+Available governors and defaults can be overridden by GitHub Actions inputs. See [BUILD.md](BUILD.md).
 
 ## Debugging
 
-- `CONFIG_DEBUG_KERNEL=y`
-- Kernel debugging support remains enabled.
-- Do not treat the removal of optional audit features as disabling kernel debugging or dmesg.
+- `CONFIG_DEBUG_KERNEL=y` remains enabled.
+- Removing optional audit features does not disable kernel debugging or `dmesg`.
 
 ## Build-time optional integrations
 
-These are selected by the CI workflow and are not unconditional kernel features:
+Selected by the CI workflow; these are not unconditional kernel features:
 
 - BakaSU, optionally with SUSFS.
 - NetHunter Wi-Fi injection and USB HID gadget patches.
