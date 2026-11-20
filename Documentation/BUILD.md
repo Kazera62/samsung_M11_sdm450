@@ -74,7 +74,7 @@ When `send_zip_to_telegram=true`, the workflow requires repository secrets:
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHANNEL_ID`
 
-If either secret is absent, the GitHub Actions artifact remains available and Telegram delivery is skipped.
+If either secret is absent, the GitHub Actions artifact remains available and Telegram delivery is skipped. Telegram API errors do not fail the build.
 
 ## Output and validation
 
