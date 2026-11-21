@@ -998,7 +998,7 @@
 			< 2150400000 8>,
 			< 2208000000 9>,
 			< 2448000000 10>, /* existing 2.448 GHz OPP */
-			< 2611200000 11>; /* 2.6112 GHz CPU OPP; CPR corner 11 */
+			< 2611200000 11>, /* 2.6112 GHz CPU OPP; CPR corner 11 */
 			< 2707200000 12>, /* 2.7072 GHz CPU OPP; CPR corner 12 */
 			< 2803200000 13>, /* 2.8032 GHz CPU OPP; CPR corner 13 */
 			< 2899200000 14>, /* 2.8992 GHz CPU OPP; CPR corner 14 */
@@ -1032,7 +1032,7 @@
 			< 2150400000 8>,
 			< 2208000000 9>,
 			< 2448000000 10>, /* existing 2.448 GHz OPP */
-			< 2611200000 11>; /* 2.6112 GHz CPU OPP; CPR corner 11 */
+			< 2611200000 11>, /* 2.6112 GHz CPU OPP; CPR corner 11 */
 			< 2707200000 12>, /* 2.7072 GHz CPU OPP; CPR corner 12 */
 			< 2803200000 13>, /* 2.8032 GHz CPU OPP; CPR corner 13 */
 			< 2899200000 14>, /* 2.8992 GHz CPU OPP; CPR corner 14 */
@@ -1066,7 +1066,7 @@
 			< 2150400000 8>,
 			< 2208000000 9>,
 			< 2448000000 10>, /* existing 2.448 GHz OPP */
-			< 2611200000 11>; /* 2.6112 GHz CPU OPP; CPR corner 11 */
+			< 2611200000 11>, /* 2.6112 GHz CPU OPP; CPR corner 11 */
 			< 2707200000 12>, /* 2.7072 GHz CPU OPP; CPR corner 12 */
 			< 2803200000 13>, /* 2.8032 GHz CPU OPP; CPR corner 13 */
 			< 2899200000 14>, /* 2.8992 GHz CPU OPP; CPR corner 14 */
