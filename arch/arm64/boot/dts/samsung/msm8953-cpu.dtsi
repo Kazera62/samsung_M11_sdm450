@@ -240,8 +240,8 @@
 				2611200  77 /* estimated scheduler cost; validate */
 				2707200  84 /* estimated: P ~ f * V^2; validate */
 				2803200  92 /* estimated: P ~ f * V^2; validate */
-				2899200 101 /* estimated: P ~ f * V^2; validate */
-				3014400 112 /* estimated: P ~ f * V^2; validate */
+				2899200  101 /* estimated: P ~ f * V^2; validate */
+				3014400  112 /* estimated: P ~ f * V^2; validate */
 			>;
 			idle-cost-data = <
 				4 3 2 1
@@ -267,8 +267,8 @@
 				2611200  201 /* estimated scheduler cost; validate */
 				2707200  220 /* estimated: P ~ f * V^2; validate */
 				2803200  241 /* estimated: P ~ f * V^2; validate */
-				2899200 264 /* estimated: P ~ f * V^2; validate */
-				3014400 293 /* estimated: P ~ f * V^2; validate */
+				2899200  264 /* estimated: P ~ f * V^2; validate */
+				3014400  293 /* estimated: P ~ f * V^2; validate */
 			>;
 			idle-cost-data = <
 				4 3 2 1
@@ -294,8 +294,8 @@
 				2611200  196 /* estimated scheduler cost; validate */
 				2707200  214 /* estimated: P ~ f * V^2; validate */
 				2803200  235 /* estimated: P ~ f * V^2; validate */
-				2899200 257 /* estimated: P ~ f * V^2; validate */
-				3014400 285 /* estimated: P ~ f * V^2; validate */
+				2899200  257 /* estimated: P ~ f * V^2; validate */
+				3014400  285 /* estimated: P ~ f * V^2; validate */
 			>;
 			idle-cost-data = <
 				4 3 2 1
