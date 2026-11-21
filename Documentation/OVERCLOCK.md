@@ -86,7 +86,10 @@ The 1,280,000 µV figure is the configured software ceiling for the top CPR corn
 
 ## CCI
 
-File: `drivers/clk/msm/clock-cpu-8953.c`
+Source files:
+- Clock relationship and rate propagation: `drivers/clk/msm/clock-cpu-8953.c`
+- CCI frequency-to-corner maps: `arch/arm64/boot/dts/samsung/msm8953.dtsi`
+- CCI regulator corner limits: `arch/arm64/boot/dts/samsung/msm8953-regulator.dtsi`
 
 The driver defines:
 
@@ -94,23 +97,21 @@ The driver defines:
 #define CCI_RATE(rate) (div_u64((rate * 10ULL), 25))
 ```
 
-Therefore:
+This gives a CPU-to-CCI relationship of CPU / 2.5 (40%). The CCI mux uses the same HFPLL source and supports half-step dividers, so a 2.5 divider produces the rates below. The CPU clock transition path also updates the cached `cci_clk.c.rate` using this formula.
 
-```text
-CCI rate = CPU rate × 0.4 = CPU rate ÷ 2.5
-```
+| CPU rate | CCI rate | CCI corner |
+|---:|---:|---:|
+| 1,804.8 MHz | 721.92 MHz | 5 |
+| 2,448 MHz | 979.2 MHz | 10 |
+| 2,611.2 MHz | 1,044.48 MHz | 11 |
+| 2,707.2 MHz | 1,082.88 MHz | 12 |
+| 2,803.2 MHz | 1,121.28 MHz | 13 |
+| 2,899.2 MHz | 1,159.68 MHz | 14 |
+| 3,014.4 MHz | 1,205.76 MHz | 15 |
 
-| CPU rate | Derived CCI rate |
-|---:|---:|
-| 1,804.8 MHz | 721.92 MHz |
-| 2,448 MHz | 979.2 MHz |
-| 2,611.2 MHz | 1,044.48 MHz |
-| 2,707.2 MHz | 1,082.88 MHz |
-| 2,803.2 MHz | 1,121.28 MHz |
-| 2,899.2 MHz | 1,159.68 MHz |
-| 3,014.4 MHz | 1,205.76 MHz |
+The `qcom,speedX-bin-v0-cci` entries are CCI-specific frequency-to-corner maps consumed by `clock_cpu_probe()`. They must cover the CCI rate associated with every enabled CPU OPP. The active speed-bin maps (0, 2, 6, and 7) now include the four added CCI rows for corners 12–15. Before this correction, the maps stopped at 1.04448 GHz (corner 11), even though the CPU OPP table and the arithmetic CPU-to-CCI relationship had been extended further.
 
-CCI follows the CPU rate through the clock driver's rate-setting path. It is not an independent DDR clock control, and these derived values do not represent DDR frequency or memory timing changes.
+CCI rate is not a DDR clock or a memory-frequency OPP. Raising the CCI rate does not itself raise DDR frequency; bandwidth requests remain controlled by the separate CPUBW/minCPUBW devfreq maps below.
 
 ## CPU bandwidth mapping
 
