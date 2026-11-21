@@ -51,7 +51,10 @@
 #define APCS_PLL_TEST_CTL_HI	0x34
 
 #define UPDATE_CHECK_MAX_LOOPS 5000
-/* CCI tracks CPU at 40%: 2.448 GHz -> 979.2 MHz; 2.6112 GHz -> 1.04448 GHz. */
+/*
+ * CCI follows the CPU clock at 40% (CPU / 2.5), up to 1.20576 GHz
+ * with the 3.0144 GHz CPU OPP.
+ */
 #define CCI_RATE(rate)		(div_u64((rate * 10ULL), 25))
 #define PLL_MODE(x)		(*(x)->base + (unsigned long) (x)->mode_reg)
 
