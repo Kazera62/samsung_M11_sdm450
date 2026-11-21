@@ -407,15 +407,15 @@
 				qcom,cpr-fuse-combos = <64>;
 				qcom,cpr-speed-bins = <8>;
 				qcom,cpr-speed-bin-corners =
-					<11 0 11 0 0 0 11 11>;
+					<15 0 15 0 0 0 15 15>;
 
 				qcom,cpr-corners =
 					/* Speed bin 0 */
-					<11 11 11 11 11 11 11 11>,
+					<15 15 15 15 15 15 15 15>,
 					/* Speed bin 1 */
 					<0 0 0 0 0 0 0 0>,
 					/* Speed bin 2 */
-					<11 11 11 11 11 11 11 11>,
+					<15 15 15 15 15 15 15 15>,
 					/* Speed bin 3 */
 					<0 0 0 0 0 0 0 0>,
 					/* Speed bin 4 */
@@ -423,17 +423,17 @@
 					/* Speed bin 5 */
 					<0 0 0 0 0 0 0 0>,
 					/* Speed bin 6 */
-					<11 11 11 11 11 11 11 11>,
+					<15 15 15 15 15 15 15 15>,
 					/* Speed bin 7 */
-					<11 11 11 11 11 11 11 11>;
+					<15 15 15 15 15 15 15 15>;
 
 				qcom,cpr-corner-fmax-map =
 					/* Speed bin 0 */
-					<1 2 4 10>,
+					<1 2 4 15>,
 					/* Speed bin 1 */
 					<0 0 0 0>,
 					/* Speed bin 2 */
-					<1 2 4 10>,
+					<1 2 4 15>,
 					/* Speed bin 3 */
 					<0 0 0 0>,
 					/* Speed bin 4 */
@@ -441,9 +441,9 @@
 					/* Speed bin 5 */
 					<0 0 0 0>,
 					/* Speed bin 6 */
-					<1 2 4 10>,
+					<1 2 4 15>,
 					/* Speed bin 7 */
-					<1 2 4 10>;
+					<1 2 4 15>;
 
 				/* CPU OC OPPs extend through 3.0144 GHz; corner 15 ceiling is 1.28 V. */
 				qcom,cpr-voltage-ceiling =
