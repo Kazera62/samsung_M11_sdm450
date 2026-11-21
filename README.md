@@ -22,6 +22,8 @@ Linux 4.9 kernel for Samsung Galaxy M11 (m11q), based on Qualcomm SDM450.
 
 Configured maxima are source limits, not a guarantee of stability on every device. See [Overclock implementation](Documentation/OVERCLOCK.md) for the detailed CPU OPP, PLL, CPR, regulator, CCI, and bandwidth mapping.
 
+The CCI maximum follows CPU / 2.5 and requires matching frequency-to-corner entries in the CCI map in `arch/arm64/boot/dts/samsung/msm8953.dtsi`.
+
 ## Documentation
 
 - [Overclock implementation](Documentation/OVERCLOCK.md) — CPU/GPU OPP, PLL, CPR, regulator, CCI, and bandwidth mapping.
