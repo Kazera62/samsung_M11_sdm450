@@ -42,7 +42,16 @@ The CPU clock driver reads the speed-bin value from eFuse bits 10:8 and loads th
 
 All four active CPU maps now cover 2.7072, 2.8032, 2.8992, and 3.0144 GHz at corners 12–15. The bin-0 map already contained these rows; the missing rows in bins 2, 6, and 7 are now added. Before this correction, those three bins ended at 2.6112 GHz / corner 11, so devices using them could not register the higher CPU OPPs even though the global cpufreq table, HFPLL limit, and CPR voltage data supported them.
 
-The scheduler energy model in `msm8953-cpu.dtsi` still ends at 2.6112 GHz. This does not limit CPU OPP registration, but energy-aware scheduling above that point is not represented by a matching measured/validated energy state. Do not invent higher power costs; update that model only with a defensible power characterization.
+The `CPU_COST_0`, `CLUSTER_COST_0`, and `CLUSTER_COST_1` scheduler energy tables now cover the CPU OPP range through 3.0144 GHz. The four new power-cost entries are estimates, not silicon measurements. They are extrapolated from the 2.6112 GHz / corner 11 entries using the dynamic-power approximation `P ~ frequency * voltage^2`, with the CPR voltage ceilings for corners 12–15 (1.170, 1.205, 1.240, and 1.280 V) as the voltage proxy. The resulting relative scheduler costs are:
+
+| CPU frequency | Core cost | Cluster 0 cost | Cluster 1 cost |
+|---:|---:|---:|---:|
+| 2,707.2 MHz | 84 | 220 | 214 |
+| 2,803.2 MHz | 92 | 241 | 235 |
+| 2,899.2 MHz | 101 | 264 | 257 |
+| 3,014.4 MHz | 112 | 293 | 285 |
+
+These values complete the scheduler model's frequency coverage; they do not define regulator voltage or guarantee accurate energy ranking. Replace them with measured or platform-calibrated power costs when such data is available.
 
 ### HFPLL and VDD-MX limit
 
