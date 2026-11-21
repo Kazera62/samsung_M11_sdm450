@@ -45,7 +45,7 @@ on:
         description: "Default CPU governor"
         required: true
         type: choice
-        default: performance
+        default: schedutil
         options:
           - performance
           - schedutil
@@ -93,7 +93,7 @@ on:
         description: "Kernel timer tick rate (CONFIG_HZ)"
         required: true
         type: choice
-        default: "1000"
+        default: "100"
         options:
           - "100"
           - "250"
