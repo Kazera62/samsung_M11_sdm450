@@ -127,20 +127,20 @@ static struct pll_clk apcs_hf_pll = {
 		.test_ctl_lo_val = 0x1C000000,
 	},
 	.base = &virt_bases[APCS_C0_PLL_BASE],
-	/* CPU OPP ceiling includes 2.6112 GHz (136 x 19.2 MHz). */
-	.max_rate = 2611200000UL,
+	/* CPU OPP ceiling includes 3.0144 GHz (157 x 19.2 MHz). */
+	.max_rate = 3014400000UL,
 	.min_rate = 652800000UL,
 	.src_rate =  19200000UL,
 	.c = {
 		.parent = &xo_a_clk.c,
 		.dbg_name = "apcs_hf_pll",
 		.ops = &clk_ops_variable_rate,
-		/* 2.6112 GHz OPP requires MX TURBO; lower rates remain SVS/NOM. */
+		/* 3.0144 GHz OPP requires MX TURBO; lower rates remain SVS/NOM. */
 		.vdd_class = &vdd_pll,
 		.fmax = (unsigned long[VDD_MX_NUM]) {
 			[VDD_MX_SVS] = 2448000000UL,
 			[VDD_MX_NOM] = 2448000000UL,
-			[VDD_MX_TUR] = 2611200000UL,
+			[VDD_MX_TUR] = 3014400000UL,
 		},
 		.num_fmax = VDD_MX_NUM,
 		CLK_INIT(apcs_hf_pll.c),
