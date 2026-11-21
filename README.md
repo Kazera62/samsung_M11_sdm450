@@ -12,15 +12,22 @@ Linux 4.9 kernel for Samsung Galaxy M11 (m11q), based on Qualcomm SDM450.
 | Kernel base | Linux 4.9 |
 | Defconfig | `a11q_open_defconfig` |
 
-## Clock configuration
+## Clock and voltage configuration
+
+This branch, `NOCTURNE-EXTREME-3GHZ`, contains an experimental CPU overclock configuration.
 
 | Domain | Reference | Configured maximum |
 |---|---:|---:|
-| CPU | 1.8048 GHz | 2.6112 GHz |
+| CPU Cortex-A53 | 1.8048 GHz | 3.0144 GHz |
 | GPU Adreno 506 | 600 MHz | 824 MHz |
-| CCI | 721.92 MHz | 1,044.48 MHz |
+| CCI | 721.92 MHz | 1,205.76 MHz at the 3.0144 GHz CPU rate |
 
-Configured maxima are source limits, not a guarantee of stability on every device.
+- CPU OPP entries added for this branch: 2.7072, 2.8032, 2.8992, and 3.0144 GHz.
+- CPU HFPLL maximum rate and VDD-MX TURBO FMAX are configured to 3,014,400,000 Hz. SVS/NOM FMAX remain at 2,448,000,000 Hz.
+- CPR logical corners are extended through corner 15. The configured software voltage ceiling at corner 15 is 1,280,000 µV (1,280 mV); this is a ceiling, not a fixed operating voltage.
+- GPU and CCI values above describe their existing source configuration/derived relationship; this branch's new overclock entries are for the CPU.
+
+These are source-level limits and mappings, not a guarantee of stability or proof of successful operation on hardware. Build, device-tree validation, and runtime/boot testing have not been established by this documentation update.
 
 ## Documentation
 
