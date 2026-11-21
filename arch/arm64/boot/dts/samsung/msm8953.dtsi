@@ -999,6 +999,10 @@
 			< 2208000000 9>,
 			< 2448000000 10>, /* existing 2.448 GHz OPP */
 			< 2611200000 11>; /* 2.6112 GHz CPU OPP; CPR corner 11 */
+			< 2707200000 12>, /* 2.7072 GHz CPU OPP; CPR corner 12 */
+			< 2803200000 13>, /* 2.8032 GHz CPU OPP; CPR corner 13 */
+			< 2899200000 14>, /* 2.8992 GHz CPU OPP; CPR corner 14 */
+			< 3014400000 15>; /* 3.0144 GHz CPU OPP; CPR corner 15 */
 		qcom,speed2-bin-v0-cci =
 			<         0 0>,
 			< 261120000 1>,
@@ -1029,6 +1033,10 @@
 			< 2208000000 9>,
 			< 2448000000 10>, /* existing 2.448 GHz OPP */
 			< 2611200000 11>; /* 2.6112 GHz CPU OPP; CPR corner 11 */
+			< 2707200000 12>, /* 2.7072 GHz CPU OPP; CPR corner 12 */
+			< 2803200000 13>, /* 2.8032 GHz CPU OPP; CPR corner 13 */
+			< 2899200000 14>, /* 2.8992 GHz CPU OPP; CPR corner 14 */
+			< 3014400000 15>; /* 3.0144 GHz CPU OPP; CPR corner 15 */
 		qcom,speed6-bin-v0-cci =
 			<         0 0>,
 			< 261120000 1>,
@@ -1059,6 +1067,10 @@
 			< 2208000000 9>,
 			< 2448000000 10>, /* existing 2.448 GHz OPP */
 			< 2611200000 11>; /* 2.6112 GHz CPU OPP; CPR corner 11 */
+			< 2707200000 12>, /* 2.7072 GHz CPU OPP; CPR corner 12 */
+			< 2803200000 13>, /* 2.8032 GHz CPU OPP; CPR corner 13 */
+			< 2899200000 14>, /* 2.8992 GHz CPU OPP; CPR corner 14 */
+			< 3014400000 15>; /* 3.0144 GHz CPU OPP; CPR corner 15 */
 		qcom,speed7-bin-v0-cci =
 			<         0 0>,
 			< 261120000 1>,

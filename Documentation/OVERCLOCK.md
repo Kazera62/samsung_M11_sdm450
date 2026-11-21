@@ -36,6 +36,14 @@ The CPU entries in `qcom,cpufreq-table` use kHz. The added high-frequency entrie
 
 The preceding configured high OPPs include 1,958.4, 2,016, 2,150.4, 2,208, and 2,448 MHz, with 2,611.2 MHz as the previous upper step. The four entries above extend the table through 3.0144 GHz.
 
+### Per-bin CPU frequency-to-corner mapping
+
+The CPU clock driver reads the speed-bin value from eFuse bits 10:8 and loads the matching `qcom,speedX-bin-v0-cl` property. The active CPR speed bins in this device tree are 0, 2, 6, and 7. Each active CPU map must contain the same upper OPP range; the driver does not substitute the bin-0 table when another bin has its own property.
+
+All four active CPU maps now cover 2.7072, 2.8032, 2.8992, and 3.0144 GHz at corners 12–15. The bin-0 map already contained these rows; the missing rows in bins 2, 6, and 7 are now added. Before this correction, those three bins ended at 2.6112 GHz / corner 11, so devices using them could not register the higher CPU OPPs even though the global cpufreq table, HFPLL limit, and CPR voltage data supported them.
+
+The scheduler energy model in `msm8953-cpu.dtsi` still ends at 2.6112 GHz. This does not limit CPU OPP registration, but energy-aware scheduling above that point is not represented by a matching measured/validated energy state. Do not invent higher power costs; update that model only with a defensible power characterization.
+
 ### HFPLL and VDD-MX limit
 
 File: `drivers/clk/msm/clock-cpu-8953.c`
@@ -109,7 +117,7 @@ This gives a CPU-to-CCI relationship of CPU / 2.5 (40%). The CCI mux uses the sa
 | 2,899.2 MHz | 1,159.68 MHz | 14 |
 | 3,014.4 MHz | 1,205.76 MHz | 15 |
 
-The `qcom,speedX-bin-v0-cci` entries are CCI-specific frequency-to-corner maps consumed by `clock_cpu_probe()`. They must cover the CCI rate associated with every enabled CPU OPP. The active speed-bin maps (0, 2, 6, and 7) now include the four added CCI rows for corners 12–15. Before this correction, the maps stopped at 1.04448 GHz (corner 11), even though the CPU OPP table and the arithmetic CPU-to-CCI relationship had been extended further.
+The `qcom,speedX-bin-v0-cci` entries are CCI-specific frequency-to-corner maps consumed by `clock_cpu_probe()`. They must cover the CCI rate associated with every enabled CPU OPP. The active speed-bin maps (0, 2, 6, and 7) include the four added CCI rows for corners 12–15. Keep these CCI maps paired with the CPU `-cl` maps above; extending CCI alone is not sufficient to register higher CPU OPPs.
 
 CCI rate is not a DDR clock or a memory-frequency OPP. Raising the CCI rate does not itself raise DDR frequency; bandwidth requests remain controlled by the separate CPUBW/minCPUBW devfreq maps below.
 
