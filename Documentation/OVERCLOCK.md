@@ -10,7 +10,7 @@ This document describes the clock, OPP, CPR, regulator, and interconnect configu
 | GPU Adreno 506 | 600 MHz | 824 MHz |
 | CCI | 721.92 MHz | 1,205.76 MHz* |
 
-*CCI is derived from the CPU clock at a 0.4 ratio in the clock driver. The 1,205.76 MHz figure is the arithmetic result at a 3,014.4 MHz CPU rate, not an independently defined CCI OPP or a DDR frequency.
+*The 1,205.76 MHz CCI maximum follows CPU / 2.5 and is backed by the CCI-specific frequency-to-corner map in `arch/arm64/boot/dts/samsung/msm8953.dtsi`. It is not a DDR frequency.
 
 ## CPU
 
