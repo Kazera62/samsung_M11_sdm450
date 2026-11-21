@@ -26,12 +26,13 @@ Relevant defconfig options:
 
 - `CONFIG_CPU_FREQ=y`
 - `CONFIG_CPU_BOOST=y`
-- `CONFIG_CPU_FREQ_GOV_PERFORMANCE=y`
-- `CONFIG_CPU_FREQ_GOV_SCHEDUTIL=y`
+- `CONFIG_CPU_FREQ_GOV_PERFORMANCE=y` (available for manual selection)
+- `CONFIG_CPU_FREQ_GOV_SCHEDUTIL=y` (default governor)
+- `CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL=y`
 - `CONFIG_DEVFREQ_BOOST=y`
 - `CONFIG_QCOM_DEVFREQ_DEVBW=y`
 
-Available governors and defaults can be overridden by GitHub Actions inputs. See [BUILD.md](BUILD.md).
+`schedutil` is the kernel default. GitHub Actions can override it for a build when explicitly requested. The `performance` governor remains available for manual testing, but is not recommended as the sustained default because it requests the maximum policy frequency. See [BUILD.md](BUILD.md).
 
 ## Debugging
 
