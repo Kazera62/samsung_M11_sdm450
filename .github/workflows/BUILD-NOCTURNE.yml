@@ -837,20 +837,31 @@ jobs:
 
           path = Path(sys.argv[1])
           source = path.read_text()
-          old = '$(shell $(MAKE) -s -C'
-          new = '$(shell env -u MAKEFLAGS -u MFLAGS $(MAKE) -s -j1 -C'
-          if old in source:
+
+          # Current BakaSU uses -f $(srctree)/Makefile; older revisions
+          # used -C. Match the MAKE invocation prefix to support both.
+          old = '$(shell $(MAKE) -s'
+          new = '$(shell env -u MAKEFLAGS -u MFLAGS $(MAKE) -s -j1'
+
+          if new in source:
+              if source.count(new) != 1:
+                  raise SystemExit("Expected exactly one patched BakaSU headers_install sub-make.")
+              print("BakaSU headers_install already runs serially without inherited jobserver flags.")
+          elif old in source:
               if source.count(old) != 1:
                   raise SystemExit("Expected exactly one BakaSU headers_install sub-make.")
               source = source.replace(old, new, 1)
               path.write_text(source)
-              print("BakaSU headers_install now runs serially without inheriting stale jobserver descriptors.")
-          elif new in source:
-              print("BakaSU jobserver compatibility change is already present.")
+              print("BakaSU headers_install now runs serially without inherited jobserver flags.")
           else:
-              raise SystemExit("BakaSU preinit runner layout changed; no jobserver edit applied.")
-          PY
+              raise SystemExit(
+                  "BakaSU preinit runner has an unsupported headers_install command; no edit applied."
+              )
 
+          final_source = path.read_text()
+          if final_source.count(new) != 1:
+              raise SystemExit("BakaSU jobserver compatibility change was not retained.")
+          PY
       - name: Ensure Non-root build has no root integration
         if: inputs.root == 'Non-root'
         shell: bash
