@@ -931,21 +931,24 @@ jobs:
           import re
           import textwrap
 
-          path = Path("fs/susfs.c")
-          if not path.is_file():
+          source_path = Path("fs/susfs.c")
+          if not source_path.is_file():
               raise SystemExit("::error::SUSFS source fs/susfs.c is missing.")
 
-          source = path.read_text()
+          source = source_path.read_text()
+
+          # Linux 4.9 predates kvmalloc(). Add the fallback only when this
+          # SUSFS source calls susfs_kvmalloc() but has no local definition.
           if "susfs_kvmalloc(" in source and "static inline void *susfs_kvmalloc" not in source:
-              vmalloc_include = "#include <linux/vmalloc.h>\n"
+              vmalloc_include = "#include <linux/vmalloc.h>\\n"
               if vmalloc_include not in source:
-                  anchor = "#include <linux/string.h>\n"
+                  anchor = "#include <linux/string.h>\\n"
                   if source.count(anchor) != 1:
                       raise SystemExit("::error::Cannot locate SUSFS include anchor for vmalloc compatibility.")
                   source = source.replace(anchor, anchor + vmalloc_include, 1)
 
-              helper_marker = "#ifdef CONFIG_KSU_SUSFS_ENABLE_LOG\nDEFINE_STATIC_KEY_TRUE(susfs_is_log_enabled);"
-              helper = textwrap.dedent("""\
+              helper_marker = "#ifdef CONFIG_KSU_SUSFS_ENABLE_LOG\\nDEFINE_STATIC_KEY_TRUE(susfs_is_log_enabled);"
+              helper = textwrap.dedent("""\\
               /*
                * Linux 4.9 predates kvmalloc(). Keep allocations compatible with
                * kvfree(): try kmalloc first, then fall back to vmalloc.
@@ -974,39 +977,100 @@ jobs:
           else:
               print("No legacy SUSFS kvmalloc calls found; allocator fallback not needed.")
 
-          modern_read = re.compile(
-              r"(?m)^([ \t]*)ret = kernel_read\(fp, buf, size, &pos\);[ \t]*$"
-          )
-          matches = list(modern_read.finditer(source))
-          compat_guard = "#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)"
-          if matches:
-              if len(matches) != 1:
-                  raise SystemExit(
-                      f"::error::Expected one SUSFS kernel_read call to adapt, found {len(matches)}."
-                  )
-              indent = matches[0].group(1)
-              replacement = (
-                  f"{indent}{compat_guard}\n"
-                  f"{indent}ret = kernel_read(fp, pos, buf, size);\n"
-                  f"{indent}#else\n"
-                  f"{indent}ret = kernel_read(fp, buf, size, &pos);\n"
-                  f"{indent}#endif"
+          # SUSFS 2.x may provide a wrapper already. It is required because
+          # Linux 4.9 uses kernel_read(file, offset, buffer, count), while
+          # newer/backported kernels use kernel_read(file, buffer, count, pos).
+          read_helper = textwrap.dedent("""\\
+          #ifdef SUSFS_KERNEL_READ_NEW
+          static inline int susfs_kernel_read(struct file *fp, void *buf, size_t size, loff_t *pos)
+          {
+              return kernel_read(fp, buf, size, pos);
+          }
+          #else
+          static inline int susfs_kernel_read(struct file *fp, void *buf, size_t size, loff_t *pos)
+          {
+              return kernel_read(fp, *pos, buf, size);
+          }
+          #endif
+          """)
+
+          helper_marker = "static inline int susfs_kernel_read("
+          wrapped_call = "susfs_kernel_read(fp, buf, size, &pos)"
+          if helper_marker not in source:
+              # Normalize either known direct kernel_read signature through
+              # the wrapper. Do not guess on any unrecognized call layout.
+              direct_patterns = (
+                  re.compile(r"(?m)^([ \\t]*)ret\\s*=\\s*kernel_read\\(\\s*fp\\s*,\\s*buf\\s*,\\s*size\\s*,\\s*&pos\\s*\\)\\s*;"),
+                  re.compile(r"(?m)^([ \\t]*)ret\\s*=\\s*kernel_read\\(\\s*fp\\s*,\\s*pos\\s*,\\s*(?:\\(char\\s*\\*\\)\\s*)?buf\\s*,\\s*size\\s*\\)\\s*;"),
               )
-              source = modern_read.sub(lambda _: replacement, source, count=1)
-              print("Applied Linux 4.9 kernel_read argument-order compatibility.")
-          elif compat_guard in source and "kernel_read(fp, pos, buf, size)" in source:
-              print("SUSFS kernel_read compatibility is already present.")
+              replacements = 0
+              for pattern in direct_patterns:
+                  matches = list(pattern.finditer(source))
+                  for match in reversed(matches):
+                      indent = match.group(1)
+                      source = source[:match.start()] + indent + "ret = " + wrapped_call + ";" + source[match.end():]
+                      replacements += 1
+              if replacements == 0:
+                  raise SystemExit(
+                      "::error::Cannot identify SUSFS kernel_read API or existing susfs_kernel_read wrapper."
+                  )
+
+              # Keep the API choice tied to the kernel's actual prototype,
+              # not only LINUX_VERSION_CODE (some 4.9 trees backport the API).
+              include_anchor = '#include "mount.h"\\n'
+              if source.count(include_anchor) != 1:
+                  raise SystemExit("::error::Cannot locate SUSFS include anchor for kernel_read wrapper.")
+              source = source.replace(include_anchor, include_anchor + "\\n" + read_helper + "\\n", 1)
+              print(f"Wrapped {replacements} SUSFS kernel_read call(s) for old/new API compatibility.")
           else:
-              raise SystemExit("::error::Cannot find the expected SUSFS kernel_read call to validate.")
+              required = (
+                  "#ifdef SUSFS_KERNEL_READ_NEW",
+                  "return kernel_read(fp, buf, size, pos);",
+                  "#else",
+                  "return kernel_read(fp, *pos, buf, size);",
+                  "#endif",
+                  wrapped_call,
+              )
+              missing = [item for item in required if item not in source]
+              if missing:
+                  raise SystemExit(
+                      "::error::Existing SUSFS kernel_read wrapper is incomplete: " + ", ".join(missing)
+                  )
+              print("SUSFS kernel_read wrapper already handles Linux 4.9 and newer/backported signatures.")
+
+          # Select the wrapper branch by inspecting the real kernel prototype.
+          # This also covers vendor 4.9 trees that backport the newer API.
+          makefile_path = Path("fs/Makefile")
+          if not makefile_path.is_file():
+              raise SystemExit("::error::fs/Makefile is missing; cannot configure SUSFS kernel_read detection.")
+          makefile = makefile_path.read_text()
+          detect_flag = "CFLAGS_susfs.o += -DSUSFS_KERNEL_READ_NEW"
+          if detect_flag not in makefile:
+              object_anchor = "obj-$(CONFIG_KSU_SUSFS) += susfs.o\\n"
+              detect_block = textwrap.dedent("""\\
+              # Detect kernel_read() by prototype: Linux 4.9 normally uses the
+              # offset-first form, while vendor trees may backport the newer form.
+              ifeq ($(shell grep -q "ssize_t kernel_read" $(srctree)/fs/read_write.c $(srctree)/fs/exec.c 2>/dev/null; echo $$?),0)
+              CFLAGS_susfs.o += -DSUSFS_KERNEL_READ_NEW
+              endif
+              """)
+              if makefile.count(object_anchor) != 1:
+                  raise SystemExit("::error::Cannot locate unique SUSFS object entry in fs/Makefile.")
+              makefile = makefile.replace(object_anchor, object_anchor + detect_block, 1)
+              makefile_path.write_text(makefile)
+              print("Added kernel_read prototype detection to fs/Makefile.")
+          elif "grep -q \\"ssize_t kernel_read\\"" not in makefile:
+              raise SystemExit("::error::SUSFS kernel_read define exists without prototype-based detection.")
 
           if "susfs_kvmalloc(" in source and "static inline void *susfs_kvmalloc" not in source:
               raise SystemExit("::error::SUSFS allocator fallback declaration is still missing.")
-          if "kernel_read(fp, pos, buf, size)" not in source:
-              raise SystemExit("::error::Linux 4.9 kernel_read compatibility was not retained.")
+          if helper_marker not in source or wrapped_call not in source:
+              raise SystemExit("::error::SUSFS kernel_read wrapper/call was not retained.")
+          if detect_flag not in makefile:
+              raise SystemExit("::error::SUSFS kernel_read prototype detection was not retained.")
 
-          path.write_text(source)
+          source_path.write_text(source)
           PY
-
       - name: Apply KernelSU hook patch
         if: inputs.root != 'Non-root'
         uses: ./.github/workflows/patch-no-kprobe
