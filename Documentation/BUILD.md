@@ -13,11 +13,11 @@ Trigger: `workflow_dispatch` only. Select the source branch/ref before starting 
 | `root` | Non-root (default), BakaSU without SUSFS, BakaSU + SUSFS |
 | `enable_nethunter` | Boolean; default false |
 | `send_zip_to_telegram` | Boolean; default true |
-| `cpu_default_governor` | performance (default), schedutil, ondemand, conservative, userspace, powersave |
+| `cpu_default_governor` | schedutil (default), performance, ondemand, conservative, userspace, powersave |
 | `io_default_scheduler` | noop (default), deadline, cfq |
 | `compression_algorithm` | lz4 (default), lzo, zstd, lz4hc |
 | `tcp_default_congestion` | bbr (default), cubic, westwood, htcp, hybla, veno, vegas, cdg, dctcp, bic, reno |
-| `config_hz` | 1000 (default), 100, 250, 300 |
+| `config_hz` | 100 (default; matches defconfig), 250, 300, 1000 |
 
 ## Build environment
 
