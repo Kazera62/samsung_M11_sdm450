@@ -136,21 +136,25 @@ File: `arch/arm64/boot/dts/samsung/msm8953.dtsi`
 
 Relevant nodes include `cpubw`, `mincpubw`, `devfreq-cpufreq`, `cpubw_compute`, and `mincpubw_compute`.
 
-The existing 2.448 and 2.6112 GHz CPU OPP entries map to the maximum CPUBW/minCPUBW levels (7104/5859). Those values are interconnect bandwidth requests, not DDR clock OPPs. Do not assume the new CPU OPPs imply a higher DDR frequency; verify the actual mapping tables and runtime devfreq votes separately.
+Both `cpubw` and `mincpubw` expose bandwidth tables ending at request level 7324. The `cpubw-cpufreq` and `cpubw_compute` maps select 7324 for CPU OPPs from 2.7072 through 3.0144 GHz. The `mincpubw-cpufreq` floor map is intentionally different: 2.7072 GHz maps to 6152, 2.8032 and 2.8992 GHz map to 6445, and 3.0144 GHz maps to 7324.
+
+The value 7324 is a devbw bandwidth request, not a DDR clock OPP. `devfreq_devbw` scales the value by 1,048,576, and the MSM Bus aggregation path uses the CPU-to-EBI path width of 8 bytes. This produces a calculated request of approximately 959.97 MHz (the table comment rounds it to 960 MHz). It is a software-side request calculation only; it does not prove that RPM accepted the request or that physical DDR/BIMC reached that rate. Verify runtime bus votes and hardware clock measurements separately.
 
 ## GPU Adreno 506
 
-The GPU configuration is documented here for comparison. The 3 GHz branch changes described above add CPU OPPs; they do not add a new GPU OPP.
+The GPU clock OPP table remains unchanged by this bandwidth update. The changes below add GPUBW request level 11, targeting 960 MHz DDR / 480 MHz BIMC through the GPU-to-BIMC bus path. The highest 824 MHz GPU OPP keeps level 10 as its normal bus vote and permits KGSL to raise the vote to level 11 when its bus governor requests additional headroom. This is a bandwidth-vote extension, not a new GPU clock OPP or proof of the physical DDR/BIMC rate.
 
 ### OPP and bus votes
 
-File: `arch/arm64/boot/dts/samsung/sdm450.dtsi`
+Files:
+- `arch/arm64/boot/dts/samsung/msm8953-gpu.dtsi`: GPUBW bandwidth table and MSM Bus vectors.
+- `arch/arm64/boot/dts/samsung/sdm450.dtsi`: GPU OPP bus vote/minimum/maximum indices.
 
 Nodes: `&clock_gcc_gfx` (`qcom,gfxfreq-corner`) and `&msm_gpu` (`qcom,gpu-pwrlevels`).
 
 | GPU OPP | Logical corner | RPM rail request | Bus vote | Bus min–max |
 |---:|---:|---|---:|---:|
-| 824 MHz | 10 | TURBO (384) | 10 | 10–10 |
+| 824 MHz | 10 | TURBO (384) | 10 | 10–11 |
 | 747 MHz | 9 | TURBO (384) | 9 | 9–10 |
 | 700 MHz | 8 | TURBO (384) | 9 | 8–10 |
 | 650 MHz | 7 | TURBO (384) | 8 | 8–9 |
@@ -162,7 +166,30 @@ Nodes: `&clock_gcc_gfx` (`qcom,gfxfreq-corner`) and `&msm_gpu` (`qcom,gpu-pwrlev
 | 133.3 MHz | 1 | LOW_SVS | 1 | 1–4 |
 | 19.2 MHz | 0 | NONE | 0 | 0–0 |
 
-Bus votes are interconnect bandwidth levels, not DDR frequencies. The bus vote and its min/max range are separate values in the device-tree node.
+For the 824 MHz OPP, level 10 remains the default vote and the range 10–11 allows one additional bus step. KGSL clamps its dynamic bus adjustment to the active OPP's `bus-min`/`bus-max` range. The change therefore allows an extra vote under memory pressure without forcing level 11 continuously. Lower GPU OPP ranges are unchanged.
+
+### GPUBW bandwidth levels
+
+File: `arch/arm64/boot/dts/samsung/msm8953-gpu.dtsi`
+
+The `gpubw` `qcom,bw-tbl` contains 12 devfreq request levels (indices 0–11). The GPU's `qcom,msm-bus,num-cases` and `vectors-KBps` contain the same 12 cases. The index in a GPU `bus-freq` property selects a case; it is not itself a clock frequency.
+
+| GPU bus index | GPUBW request | DDR target label | BIMC target label |
+|---:|---:|---:|---:|
+| 0 | 0 | Off | Off |
+| 1 | 1611 | 211.2 MHz | 105.6 MHz |
+| 2 | 2124 | 278.4 MHz | 139.2 MHz |
+| 3 | 2929 | 384.0 MHz | 192.0 MHz |
+| 4 | 3222 | 422.4 MHz | 211.2 MHz |
+| 5 | 4248 | 556.8 MHz | 278.4 MHz |
+| 6 | 5126 | 672.0 MHz | 336.0 MHz |
+| 7 | 5859 | 768.0 MHz | 384.0 MHz |
+| 8 | 6152 | 806.4 MHz | 403.2 MHz |
+| 9 | 6445 | 844.8 MHz | 422.4 MHz |
+| 10 | 7104 | 931.2 MHz | 465.6 MHz |
+| 11 | 7324 | 960.0 MHz | 480.0 MHz |
+
+The DDR/BIMC figures are labels derived from the existing bus-vote progression and the new request/vector entry. They describe the requested interconnect target, not a measured operating frequency. GPUBW and CPUBW are separate clients whose requests are aggregated by MSM Bus; adding GPU level 11 does not alter the CPU bandwidth table.
 
 ### GPU clock source
 
@@ -194,7 +221,7 @@ When changing an OPP, audit all dependent tables:
 1. CPU/GPU OPP table in device tree.
 2. PLL and clock-source rate/divider support.
 3. CPR corner count, speed-bin/fuse mapping, voltage ceiling/floor arrays, and regulator limits.
-4. CPU/GPU bandwidth votes.
+4. CPU/GPU bandwidth votes, including CPUBW/minCPUBW devfreq maps, GPUBW `qcom,bw-tbl`, KGSL `vectors-KBps`, matching `num-cases`, and GPU `bus-min`/`bus-max` indices.
 5. Energy model and thermal cooling tables.
 6. Boot, frequency transitions, sustained load, suspend/resume, and kernel logs.
 
