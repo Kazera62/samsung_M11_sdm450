@@ -144,7 +144,6 @@ env:
   KERNELSU_BRANCH: "main"
   KERNELSU_METHOD: "shell"
   SUSFS_ENABLE: "${{ inputs.root == 'BakaSU + SUSFS' && 'true' || 'false' }}"
-  SUSFS_VERSION: "2.3.0"
   SUSFS_FIXED: "false"
   # Non-empty selector activates the inline Samsung Linux 4.9 compatibility adjustment.
   SUSFS_PATCH_FIXED: "${{ inputs.root == 'BakaSU + SUSFS' && 'inline_samsung_49_compat' || '' }}"
@@ -198,6 +197,14 @@ jobs:
           ref: mainline
           persist-credentials: false
           fetch-depth: 1
+
+      - name: Record latest build framework revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          framework_commit="$(git rev-parse HEAD)"
+          echo "NON_GKI_FRAMEWORK_COMMIT=$framework_commit" >> "$GITHUB_ENV"
+          echo "Build framework: mainline@$framework_commit"
 
       - name: Tune upstream actions for this kernel
         shell: bash
@@ -837,20 +844,31 @@ jobs:
 
           path = Path(sys.argv[1])
           source = path.read_text()
-          old = '$(shell $(MAKE) -s -C'
-          new = '$(shell env -u MAKEFLAGS -u MFLAGS $(MAKE) -s -j1 -C'
-          if old in source:
+
+          # Current BakaSU uses -f $(srctree)/Makefile; older revisions
+          # used -C. Match the MAKE invocation prefix to support both.
+          old = '$(shell $(MAKE) -s'
+          new = '$(shell env -u MAKEFLAGS -u MFLAGS $(MAKE) -s -j1'
+
+          if new in source:
+              if source.count(new) != 1:
+                  raise SystemExit("Expected exactly one patched BakaSU headers_install sub-make.")
+              print("BakaSU headers_install already runs serially without inherited jobserver flags.")
+          elif old in source:
               if source.count(old) != 1:
                   raise SystemExit("Expected exactly one BakaSU headers_install sub-make.")
               source = source.replace(old, new, 1)
               path.write_text(source)
-              print("BakaSU headers_install now runs serially without inheriting stale jobserver descriptors.")
-          elif new in source:
-              print("BakaSU jobserver compatibility change is already present.")
+              print("BakaSU headers_install now runs serially without inherited jobserver flags.")
           else:
-              raise SystemExit("BakaSU preinit runner layout changed; no jobserver edit applied.")
-          PY
+              raise SystemExit(
+                  "BakaSU preinit runner has an unsupported headers_install command; no edit applied."
+              )
 
+          final_source = path.read_text()
+          if final_source.count(new) != 1:
+              raise SystemExit("BakaSU jobserver compatibility change was not retained.")
+          PY
       - name: Ensure Non-root build has no root integration
         if: inputs.root == 'Non-root'
         shell: bash
@@ -904,9 +922,65 @@ jobs:
 
           printf 'AnyKernel3 source: %s (%s)\n' "$AK3_SOURCE" "$AK3_BRANCH"
 
+
+      - name: Prepare latest SUSFS patch metadata and reject handling
+        if: inputs.root == 'BakaSU + SUSFS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          patch_file="/tmp/Patches/Patch/susfs_patch_to_${KERNEL_VERSION}.patch"
+          test -s "$patch_file" || {
+            echo "::error::Latest SUSFS patch is missing: $patch_file"
+            exit 1
+          }
+          susfs_version="$(grep -m1 '^+#define SUSFS_VERSION ' "$patch_file" | cut -d '"' -f 2 | sed 's/^v//')"
+          [[ -n "$susfs_version" ]] || {
+            echo "::error::Cannot detect SUSFS_VERSION from the latest mainline patch."
+            exit 1
+          }
+          echo "SUSFS_VERSION=$susfs_version" >> "$GITHUB_ENV"
+          echo "Using SUSFS version v$susfs_version from mainline."
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          action_path = Path(".github/workflows/patch-susfs/action.yml")
+          action = action_path.read_text()
+          version_pattern = re.compile(r'(?m)^([ \t]*)SUSFS_VERSION="[^"]+"$')
+          action, version_count = version_pattern.subn(
+              r'\1SUSFS_VERSION="${SUSFS_VERSION:?SUSFS_VERSION not detected}"',
+              action,
+          )
+          if version_count != 1:
+              raise SystemExit(f"Expected one upstream SUSFS version assignment, found {version_count}.")
+
+          old_cleanup = r'find . -type f \( -name "*.rej" -o -name "*.orig" \) -delete'
+          if action.count(old_cleanup) != 1:
+              raise SystemExit("Expected one upstream rejected-hunk cleanup command.")
+          action = action.replace(old_cleanup, 'find . -type f -name "*.orig" -delete', 1)
+          action_path.write_text(action)
+          print("SUSFS action now reports the detected patch version and preserves .rej files for validation.")
+          PY
       - name: Apply SUSFS patch for Samsung Linux 4.9
         if: inputs.root == 'BakaSU + SUSFS'
         uses: ./.github/workflows/patch-susfs
+
+      - name: Verify SUSFS version from the applied source
+        if: inputs.root == 'BakaSU + SUSFS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/device_kernel"
+          patch_file="/tmp/Patches/Patch/susfs_patch_to_${KERNEL_VERSION}.patch"
+          source_version="$(grep -m1 '^#define SUSFS_VERSION ' include/linux/susfs.h | cut -d '"' -f 2 | sed 's/^v//')"
+          patch_version="$(grep -m1 '^+#define SUSFS_VERSION ' "$patch_file" | cut -d '"' -f 2 | sed 's/^v//')"
+          if [[ -z "$source_version" || -z "$patch_version" || "$source_version" != "$patch_version" ]]; then
+            echo "::error::SUSFS version mismatch: patch='$patch_version', source='$source_version'."
+            exit 1
+          fi
+          echo "SUSFS_VERSION=$source_version" >> "$GITHUB_ENV"
+          echo "Verified applied SUSFS version: v$source_version"
 
       - name: Fix SUSFS Linux 4.9 allocator and kernel_read compatibility
         if: inputs.root == 'BakaSU + SUSFS'
@@ -920,11 +994,14 @@ jobs:
           import re
           import textwrap
 
-          path = Path("fs/susfs.c")
-          if not path.is_file():
+          source_path = Path("fs/susfs.c")
+          if not source_path.is_file():
               raise SystemExit("::error::SUSFS source fs/susfs.c is missing.")
 
-          source = path.read_text()
+          source = source_path.read_text()
+
+          # Linux 4.9 predates kvmalloc(). Add the fallback only when this
+          # SUSFS source calls susfs_kvmalloc() but has no local definition.
           if "susfs_kvmalloc(" in source and "static inline void *susfs_kvmalloc" not in source:
               vmalloc_include = "#include <linux/vmalloc.h>\n"
               if vmalloc_include not in source:
@@ -963,39 +1040,100 @@ jobs:
           else:
               print("No legacy SUSFS kvmalloc calls found; allocator fallback not needed.")
 
-          modern_read = re.compile(
-              r"(?m)^([ \t]*)ret = kernel_read\(fp, buf, size, &pos\);[ \t]*$"
-          )
-          matches = list(modern_read.finditer(source))
-          compat_guard = "#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)"
-          if matches:
-              if len(matches) != 1:
-                  raise SystemExit(
-                      f"::error::Expected one SUSFS kernel_read call to adapt, found {len(matches)}."
-                  )
-              indent = matches[0].group(1)
-              replacement = (
-                  f"{indent}{compat_guard}\n"
-                  f"{indent}ret = kernel_read(fp, pos, buf, size);\n"
-                  f"{indent}#else\n"
-                  f"{indent}ret = kernel_read(fp, buf, size, &pos);\n"
-                  f"{indent}#endif"
+          # SUSFS 2.x may provide a wrapper already. It is required because
+          # Linux 4.9 uses kernel_read(file, offset, buffer, count), while
+          # newer/backported kernels use kernel_read(file, buffer, count, pos).
+          read_helper = textwrap.dedent("""\
+          #ifdef SUSFS_KERNEL_READ_NEW
+          static inline int susfs_kernel_read(struct file *fp, void *buf, size_t size, loff_t *pos)
+          {
+              return kernel_read(fp, buf, size, pos);
+          }
+          #else
+          static inline int susfs_kernel_read(struct file *fp, void *buf, size_t size, loff_t *pos)
+          {
+              return kernel_read(fp, *pos, buf, size);
+          }
+          #endif
+          """)
+
+          helper_marker = "static inline int susfs_kernel_read("
+          wrapped_call = "susfs_kernel_read(fp, buf, size, &pos)"
+          if helper_marker not in source:
+              # Normalize either known direct kernel_read signature through
+              # the wrapper. Do not guess on any unrecognized call layout.
+              direct_patterns = (
+                  re.compile(r"(?m)^([ \t]*)ret\s*=\s*kernel_read\(\s*fp\s*,\s*buf\s*,\s*size\s*,\s*&pos\s*\)\s*;"),
+                  re.compile(r"(?m)^([ \t]*)ret\s*=\s*kernel_read\(\s*fp\s*,\s*pos\s*,\s*(?:\(char\s*\*\)\s*)?buf\s*,\s*size\s*\)\s*;"),
               )
-              source = modern_read.sub(lambda _: replacement, source, count=1)
-              print("Applied Linux 4.9 kernel_read argument-order compatibility.")
-          elif compat_guard in source and "kernel_read(fp, pos, buf, size)" in source:
-              print("SUSFS kernel_read compatibility is already present.")
+              replacements = 0
+              for pattern in direct_patterns:
+                  matches = list(pattern.finditer(source))
+                  for match in reversed(matches):
+                      indent = match.group(1)
+                      source = source[:match.start()] + indent + "ret = " + wrapped_call + ";" + source[match.end():]
+                      replacements += 1
+              if replacements == 0:
+                  raise SystemExit(
+                      "::error::Cannot identify SUSFS kernel_read API or existing susfs_kernel_read wrapper."
+                  )
+
+              # Keep the API choice tied to the kernel's actual prototype,
+              # not only LINUX_VERSION_CODE (some 4.9 trees backport the API).
+              include_anchor = '#include "mount.h"\n'
+              if source.count(include_anchor) != 1:
+                  raise SystemExit("::error::Cannot locate SUSFS include anchor for kernel_read wrapper.")
+              source = source.replace(include_anchor, include_anchor + "\n" + read_helper + "\n", 1)
+              print(f"Wrapped {replacements} SUSFS kernel_read call(s) for old/new API compatibility.")
           else:
-              raise SystemExit("::error::Cannot find the expected SUSFS kernel_read call to validate.")
+              required = (
+                  "#ifdef SUSFS_KERNEL_READ_NEW",
+                  "return kernel_read(fp, buf, size, pos);",
+                  "#else",
+                  "return kernel_read(fp, *pos, buf, size);",
+                  "#endif",
+                  wrapped_call,
+              )
+              missing = [item for item in required if item not in source]
+              if missing:
+                  raise SystemExit(
+                      "::error::Existing SUSFS kernel_read wrapper is incomplete: " + ", ".join(missing)
+                  )
+              print("SUSFS kernel_read wrapper already handles Linux 4.9 and newer/backported signatures.")
+
+          # Select the wrapper branch by inspecting the real kernel prototype.
+          # This also covers vendor 4.9 trees that backport the newer API.
+          makefile_path = Path("fs/Makefile")
+          if not makefile_path.is_file():
+              raise SystemExit("::error::fs/Makefile is missing; cannot configure SUSFS kernel_read detection.")
+          makefile = makefile_path.read_text()
+          detect_flag = "CFLAGS_susfs.o += -DSUSFS_KERNEL_READ_NEW"
+          if detect_flag not in makefile:
+              object_anchor = "obj-$(CONFIG_KSU_SUSFS) += susfs.o\n"
+              detect_block = textwrap.dedent("""\
+              # Detect kernel_read() by prototype: Linux 4.9 normally uses the
+              # offset-first form, while vendor trees may backport the newer form.
+              ifeq ($(shell grep -q "ssize_t kernel_read" $(srctree)/fs/read_write.c $(srctree)/fs/exec.c 2>/dev/null; echo $$?),0)
+              CFLAGS_susfs.o += -DSUSFS_KERNEL_READ_NEW
+              endif
+              """)
+              if makefile.count(object_anchor) != 1:
+                  raise SystemExit("::error::Cannot locate unique SUSFS object entry in fs/Makefile.")
+              makefile = makefile.replace(object_anchor, object_anchor + detect_block, 1)
+              makefile_path.write_text(makefile)
+              print("Added kernel_read prototype detection to fs/Makefile.")
+          elif "grep -q \"ssize_t kernel_read\"" not in makefile:
+              raise SystemExit("::error::SUSFS kernel_read define exists without prototype-based detection.")
 
           if "susfs_kvmalloc(" in source and "static inline void *susfs_kvmalloc" not in source:
               raise SystemExit("::error::SUSFS allocator fallback declaration is still missing.")
-          if "kernel_read(fp, pos, buf, size)" not in source:
-              raise SystemExit("::error::Linux 4.9 kernel_read compatibility was not retained.")
+          if helper_marker not in source or wrapped_call not in source:
+              raise SystemExit("::error::SUSFS kernel_read wrapper/call was not retained.")
+          if detect_flag not in makefile:
+              raise SystemExit("::error::SUSFS kernel_read prototype detection was not retained.")
 
-          path.write_text(source)
+          source_path.write_text(source)
           PY
-
       - name: Apply KernelSU hook patch
         if: inputs.root != 'Non-root'
         uses: ./.github/workflows/patch-no-kprobe
@@ -1116,10 +1254,68 @@ jobs:
             echo "::error::Manual hooks conflict with SUSFS inline hooks."
             exit 1
           fi
-          if find . -type f -name '*.rej' -print -quit | grep -q .; then
-            echo "::error::Unresolved patch rejected hunks remain in the source tree."
-            exit 1
-          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          import re
+
+          expected_rejects = {
+              "fs/namespace.c.rej": ("#include <linux/susfs_def.h>", "CL_COPY_MNT_NS BIT(25)"),
+              "fs/proc/cmdline.c.rej": ("CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG",),
+              "fs/proc/task_mmu.c.rej": (
+                  "CONFIG_KSU_SUSFS_OPEN_REDIRECT",
+                  "CONFIG_KSU_SUSFS_SUS_MAP",
+                  "CONFIG_KSU_SUSFS_SUS_KSTAT",
+              ),
+              "fs/stat.c.rej": ("CONFIG_KSU_SUSFS_SUS_KSTAT",),
+          }
+          rejects = sorted(p for p in Path(".").rglob("*.rej"))
+          found = {p.as_posix() for p in rejects}
+          unknown = sorted(found - set(expected_rejects))
+          if unknown:
+              raise SystemExit("::error::Unexpected rejected hunks: " + ", ".join(unknown))
+
+          config_path = Path("arch/arm64/configs") / os.environ["DEFCONFIG_NAME"]
+          config_text = config_path.read_text()
+          disabled_features = (
+              "CONFIG_KSU_SUSFS_SUS_KSTAT",
+              "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG",
+              "CONFIG_KSU_SUSFS_OPEN_REDIRECT",
+              "CONFIG_KSU_SUSFS_SUS_MAP",
+          )
+          for symbol in disabled_features:
+              if re.search(r"^" + re.escape(symbol) + r"=y$", config_text, re.MULTILINE):
+                  raise SystemExit(f"::error::{symbol} is enabled; its rejected hunks cannot be ignored.")
+
+          for rejected in rejects:
+              markers = expected_rejects[rejected.as_posix()]
+              rejected_text = rejected.read_text(errors="replace")
+              if rejected.as_posix() == "fs/namespace.c.rej":
+                  if not all(marker in rejected_text for marker in markers):
+                      raise SystemExit(f"::error::Unexpected namespace compatibility reject: {rejected}")
+                  namespace = Path("fs/namespace.c").read_text()
+                  required = (
+                      "#include <linux/susfs_def.h>",
+                      "susfs_is_current_ksu_domain",
+                      "susfs_is_sdcard_android_data_not_decrypted",
+                      "CL_COPY_MNT_NS BIT(25)",
+                  )
+                  missing = [item for item in required if item not in namespace]
+                  if missing:
+                      raise SystemExit("::error::Samsung 4.9 namespace compatibility incomplete: " + ", ".join(missing))
+              elif not any(marker in rejected_text for marker in markers):
+                  raise SystemExit(f"::error::Reject is not tied to a disabled optional feature: {rejected}")
+
+          if rejects:
+              print("Validated known SUSFS rejects for disabled optional features / Samsung 4.9 compatibility:")
+              for rejected in rejects:
+                  print(f"  - {rejected}")
+          else:
+              print("No rejected SUSFS hunks found.")
+          for rejected in rejects:
+              rejected.unlink()
+          Path("rej_files_1.5.5.tar.gz").unlink(missing_ok=True)
+          PY
 
           echo "SUSFS core validated: path/mount hiding enabled; unported optional features disabled."
 
@@ -1750,6 +1946,7 @@ jobs:
             echo "| Kernel release | $kernel_release |"
             echo "| Source branch | $KERNEL_BRANCH |"
             echo "| Source commit | $kernel_commit |"
+            echo "| Build framework | NonGKI_Kernel_Build_2nd@mainline ($NON_GKI_FRAMEWORK_COMMIT) |"
             echo "| Build time | $build_time |"
             echo "| Compiler profile | $CLANG_PROFILE |"
             echo "| Clang | $compiler_version |"
