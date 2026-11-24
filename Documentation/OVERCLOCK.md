@@ -236,6 +236,21 @@ These are the Linux-side requested rates calculated from `devfreq_devbw`'s MiB s
 
 The clock measurement itself takes roughly 15 ms. Do not force the RPM BIMC clock manually or hold the memory bus at its maximum continuously as a substitute for validation: the supported DRAM timing/voltage operating points are enforced outside this Linux source tree.
 
+## Physical LPDDR3 ceiling and overclock feasibility
+
+The SDM450 platform specification identifies system memory as non-PoP LPDDR3 SDRAM on a 32-bit EBI interface, with support up to 933 MHz. A hardware BIMC measurement of 931,203,698 Hz is therefore consistent with the platform's nominal 933 MHz ceiling; the small difference is within the distinction between the programmed target and the measured counter result.
+
+The Linux path in this tree is a bandwidth-vote path, not a DRAM timing/voltage programming path:
+
+1. MSM Bus aggregates client bandwidth requests and computes a requested fabric clock.
+2. The BIMC fabric applies that request through `clk_set_rate()`.
+3. `bimc_clk` is an RPM SMD clock using `RPM_MEM_CLK_TYPE` and `BIMC_ID`; the RPM clock driver sends the rate request to remote RPM firmware.
+4. DRAM initialization, PHY training, timing parameters, and supported memory operating points are not described by the CPUBW/GPUBW tables in this kernel source.
+
+The GCC probe also sends an initial BIMC RPM vote using `INT_MAX`. This is not a new LPDDR3 OPP or a DRAM overclock implementation. Raising the Linux bandwidth-table request above the existing 960 MHz target cannot, by itself, add a supported DDR operating point.
+
+**Physical LPDDR3 overclock above 933 MHz is not implemented or validated by this kernel branch.** A real attempt would require, at minimum, the exact DRAM component identification and datasheet, a compatible RPM/DDR firmware implementation with a new trained timing/voltage operating point, and hardware validation for data integrity, suspend/resume, thermal behavior, and sustained load. No such RPM/DDR firmware source or DRAM training table is present in this kernel repository. Do not describe a higher bandwidth vote as a physical RAM overclock.
+
 ## Validation status and change checklist
 
 The values documented here were checked against the branch's source configuration. This documentation does not establish that the kernel has compiled, that the device tree passes `dtc` validation, or that the device boots and sustains these frequencies. No runtime voltage, frequency, thermal, or stability measurements are implied.
