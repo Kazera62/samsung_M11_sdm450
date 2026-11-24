@@ -134,15 +134,13 @@ CCI rate is not a DDR clock or a memory-frequency OPP. Raising the CCI rate does
 
 File: `arch/arm64/boot/dts/samsung/msm8953.dtsi`
 
-Relevant nodes include `cpubw`, `mincpubw`, `devfreq-cpufreq`, `cpubw_compute`, and `mincpubw_compute`.
+The `cpubw` and `mincpubw` bandwidth tables now end at the existing 7104 level. The unsupported 7324 / 960 MHz request entry has been removed. The `cpubw-cpufreq` and `cpubw_compute` maps cap all enabled CPU OPPs, including 2.7072–3.0144 GHz, at 7104. The `mincpubw-cpufreq` and `mincpubw_compute` maps also do not request above 7104.
 
-Both `cpubw` and `mincpubw` expose bandwidth tables ending at request level 7324. The `cpubw-cpufreq` and `cpubw_compute` maps select 7324 for CPU OPPs from 2.7072 through 3.0144 GHz. The `mincpubw-cpufreq` floor map is intentionally different: 2.7072 GHz maps to 6152, 2.8032 and 2.8992 GHz map to 6445, and 3.0144 GHz maps to 7324.
-
-The value 7324 is a devbw bandwidth request, not a DDR clock OPP. `devfreq_devbw` scales the value by 1,048,576, and the MSM Bus aggregation path uses the CPU-to-EBI path width of 8 bytes. This produces a calculated request of approximately 959.97 MHz (the table comment rounds it to 960 MHz). It is a software-side request calculation only; it does not prove that RPM accepted the request or that physical DDR/BIMC reached that rate. Verify runtime bus votes and hardware clock measurements separately.
+The value 7104 is a devfreq bandwidth request, not a DRAM timing profile. `devfreq_devbw` scales it by 1,048,576, and the MSM Bus aggregation path uses the 8-byte CPU-to-EBI path width. This produces a calculated request of about 931.14 MHz. The phone's `bimc_clk/measure` result near 931.2 MHz is consistent with that ceiling. The CPU frequency OPP table is unchanged by this memory-bandwidth cap.
 
 ## GPU Adreno 506
 
-The GPU clock OPP table remains unchanged by this bandwidth update. The changes below add GPUBW request level 11, targeting 960 MHz DDR / 480 MHz BIMC through the GPU-to-BIMC bus path. The highest 824 MHz GPU OPP keeps level 10 as its normal bus vote and permits KGSL to raise the vote to level 11 when its bus governor requests additional headroom. This is a bandwidth-vote extension, not a new GPU clock OPP or proof of the physical DDR/BIMC rate.
+The GPU clock OPP table is unchanged. The GPUBW table and matching MSM Bus vectors are capped at index 10, the existing 931.2 MHz DDR / 465.6 MHz BIMC request level. The unsupported index 11 request for 960 MHz has been removed. The 824 MHz GPU OPP now has its bus maximum fixed at index 10, so KGSL cannot select a higher GPUBW entry.
 
 ### OPP and bus votes
 
@@ -150,11 +148,9 @@ Files:
 - `arch/arm64/boot/dts/samsung/msm8953-gpu.dtsi`: GPUBW bandwidth table and MSM Bus vectors.
 - `arch/arm64/boot/dts/samsung/sdm450.dtsi`: GPU OPP bus vote/minimum/maximum indices.
 
-Nodes: `&clock_gcc_gfx` (`qcom,gfxfreq-corner`) and `&msm_gpu` (`qcom,gpu-pwrlevels`).
-
 | GPU OPP | Logical corner | RPM rail request | Bus vote | Bus min–max |
 |---:|---:|---|---:|---:|
-| 824 MHz | 10 | TURBO (384) | 10 | 10–11 |
+| 824 MHz | 10 | TURBO (384) | 10 | 10–10 |
 | 747 MHz | 9 | TURBO (384) | 9 | 9–10 |
 | 700 MHz | 8 | TURBO (384) | 9 | 8–10 |
 | 650 MHz | 7 | TURBO (384) | 8 | 8–9 |
@@ -166,13 +162,11 @@ Nodes: `&clock_gcc_gfx` (`qcom,gfxfreq-corner`) and `&msm_gpu` (`qcom,gpu-pwrlev
 | 133.3 MHz | 1 | LOW_SVS | 1 | 1–4 |
 | 19.2 MHz | 0 | NONE | 0 | 0–0 |
 
-For the 824 MHz OPP, level 10 remains the default vote and the range 10–11 allows one additional bus step. KGSL clamps its dynamic bus adjustment to the active OPP's `bus-min`/`bus-max` range. The change therefore allows an extra vote under memory pressure without forcing level 11 continuously. Lower GPU OPP ranges are unchanged.
-
 ### GPUBW bandwidth levels
 
 File: `arch/arm64/boot/dts/samsung/msm8953-gpu.dtsi`
 
-The `gpubw` `qcom,bw-tbl` contains 12 devfreq request levels (indices 0–11). The GPU's `qcom,msm-bus,num-cases` and `vectors-KBps` contain the same 12 cases. The index in a GPU `bus-freq` property selects a case; it is not itself a clock frequency.
+The `gpubw` table, `qcom,msm-bus,num-cases`, and `vectors-KBps` now agree on 11 cases (indices 0–10). The index is a bus-vote case, not a clock frequency.
 
 | GPU bus index | GPUBW request | DDR target label | BIMC target label |
 |---:|---:|---:|---:|
@@ -187,9 +181,8 @@ The `gpubw` `qcom,bw-tbl` contains 12 devfreq request levels (indices 0–11). T
 | 8 | 6152 | 806.4 MHz | 403.2 MHz |
 | 9 | 6445 | 844.8 MHz | 422.4 MHz |
 | 10 | 7104 | 931.2 MHz | 465.6 MHz |
-| 11 | 7324 | 960.0 MHz | 480.0 MHz |
 
-The DDR/BIMC figures are labels derived from the existing bus-vote progression and the new request/vector entry. They describe the requested interconnect target, not a measured operating frequency. GPUBW and CPUBW are separate clients whose requests are aggregated by MSM Bus; adding GPU level 11 does not alter the CPU bandwidth table.
+GPUBW and CPUBW are separate clients whose requests are aggregated by MSM Bus. Both paths are now constrained to their pre-existing top request level; neither table adds a new physical DRAM operating point.
 
 ### GPU clock source
 
@@ -223,18 +216,15 @@ mount -t debugfs debugfs /sys/kernel/debug 2>/dev/null || true
 cat /sys/kernel/debug/clk/bimc_clk/measure
 ```
 
-The file returns a measured rate in Hz. Sample it while running the same sustained CPU/memory workload before and after changing kernels; an idle reading is not a useful maximum because the bus is dynamically scaled.
+The file returns a measured rate in Hz. Sample it during a sustained CPU/memory workload when checking that the existing top bandwidth level is reached. A value near 931.2 MHz is consistent with the current 7104 request ceiling. An idle reading may be lower because the bus is dynamically scaled.
 
-For the current 8-byte EBI path, the request math is:
+For the current 8-byte CPU-to-EBI path, the top request calculation is:
 
 | Bandwidth table value | Calculated BIMC clock request |
 |---:|---:|
-| 7104 (previous top level) | 931,135,488 Hz (about 931.14 MHz) |
-| 7324 (new top level) | 959,971,328 Hz (about 959.97 MHz) |
+| 7104 (top supported request level) | 931,135,488 Hz (about 931.14 MHz) |
 
-These are the Linux-side requested rates calculated from `devfreq_devbw`'s MiB scaling and the MSM Bus width. They are not predictions of what the RPM firmware or DRAM will accept. A hardware measurement near 960 MHz under sustained load confirms that the new request reached the clock; a value that remains near 931 MHz indicates that the remote clock/DRAM path did not raise to the new target. A missing `measure` file means the debugfs clock-measure interface is unavailable or its probe failed; it must not be treated as a zero-frequency result.
-
-The clock measurement itself takes roughly 15 ms. Do not force the RPM BIMC clock manually or hold the memory bus at its maximum continuously as a substitute for validation: the supported DRAM timing/voltage operating points are enforced outside this Linux source tree.
+This is the Linux-side requested rate calculated from `devfreq_devbw`'s MiB scaling and the MSM Bus width. It does not independently prove the DRAM data rate or replace validation on the phone. Do not force the RPM BIMC clock manually or hold the memory bus at its maximum continuously as a substitute for a supported DRAM operating point.
 
 ## Physical LPDDR3 ceiling and overclock feasibility
 
@@ -247,7 +237,7 @@ The Linux path in this tree is a bandwidth-vote path, not a DRAM timing/voltage 
 3. `bimc_clk` is an RPM SMD clock using `RPM_MEM_CLK_TYPE` and `BIMC_ID`; the RPM clock driver sends the rate request to remote RPM firmware.
 4. DRAM initialization, PHY training, timing parameters, and supported memory operating points are not described by the CPUBW/GPUBW tables in this kernel source.
 
-The GCC probe also sends an initial BIMC RPM vote using `INT_MAX`. This is not a new LPDDR3 OPP or a DRAM overclock implementation. Raising the Linux bandwidth-table request above the existing 960 MHz target cannot, by itself, add a supported DDR operating point.
+The GCC probe also sends an initial BIMC RPM vote using `INT_MAX`. This is not a new LPDDR3 OPP or a DRAM overclock implementation. Raising a Linux bandwidth-table request cannot, by itself, add a supported DDR operating point. This branch now keeps CPU and GPU memory-bandwidth requests at the existing 931.2 MHz ceiling.
 
 **Physical LPDDR3 overclock above 933 MHz is not implemented or validated by this kernel branch.** A real attempt would require, at minimum, the exact DRAM component identification and datasheet, a compatible RPM/DDR firmware implementation with a new trained timing/voltage operating point, and hardware validation for data integrity, suspend/resume, thermal behavior, and sustained load. No such RPM/DDR firmware source or DRAM training table is present in this kernel repository. Do not describe a higher bandwidth vote as a physical RAM overclock.
 
