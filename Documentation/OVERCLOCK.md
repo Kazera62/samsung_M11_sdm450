@@ -212,6 +212,30 @@ File: `arch/arm64/boot/dts/samsung/msm8953-regulator.dtsi`
 
 RPM values are level identifiers, not millivolts. GPU LDO corner selectors are distinct from the physical VDD_CX rail voltage.
 
+## Measuring the actual BIMC clock on the phone
+
+The MSM8953 clock driver includes a hardware frequency-measurement mux. In this tree, the mux has a selectable `bimc_clk` source and the `qcom,cc-debug-8953` device-tree node registers the measurement interface. This is a hardware counter measurement, not the cached rate printed by a generic clock summary.
+
+After booting this kernel, run as root:
+
+```sh
+mount -t debugfs debugfs /sys/kernel/debug 2>/dev/null || true
+cat /sys/kernel/debug/clk/bimc_clk/measure
+```
+
+The file returns a measured rate in Hz. Sample it while running the same sustained CPU/memory workload before and after changing kernels; an idle reading is not a useful maximum because the bus is dynamically scaled.
+
+For the current 8-byte EBI path, the request math is:
+
+| Bandwidth table value | Calculated BIMC clock request |
+|---:|---:|
+| 7104 (previous top level) | 931,135,488 Hz (about 931.14 MHz) |
+| 7324 (new top level) | 959,971,328 Hz (about 959.97 MHz) |
+
+These are the Linux-side requested rates calculated from `devfreq_devbw`'s MiB scaling and the MSM Bus width. They are not predictions of what the RPM firmware or DRAM will accept. A hardware measurement near 960 MHz under sustained load confirms that the new request reached the clock; a value that remains near 931 MHz indicates that the remote clock/DRAM path did not raise to the new target. A missing `measure` file means the debugfs clock-measure interface is unavailable or its probe failed; it must not be treated as a zero-frequency result.
+
+The clock measurement itself takes roughly 15 ms. Do not force the RPM BIMC clock manually or hold the memory bus at its maximum continuously as a substitute for validation: the supported DRAM timing/voltage operating points are enforced outside this Linux source tree.
+
 ## Validation status and change checklist
 
 The values documented here were checked against the branch's source configuration. This documentation does not establish that the kernel has compiled, that the device tree passes `dtc` validation, or that the device boots and sustains these frequencies. No runtime voltage, frequency, thermal, or stability measurements are implied.
