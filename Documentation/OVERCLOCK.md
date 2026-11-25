@@ -138,6 +138,16 @@ The `cpubw` and `mincpubw` bandwidth tables now end at the existing 7104 level. 
 
 The value 7104 is a devfreq bandwidth request, not a DRAM timing profile. `devfreq_devbw` scales it by 1,048,576, and the MSM Bus aggregation path uses the 8-byte CPU-to-EBI path width. This produces a calculated request of about 931.14 MHz. The phone's `bimc_clk/measure` result near 931.2 MHz is consistent with that ceiling. The CPU frequency OPP table is unchanged by this memory-bandwidth cap.
 
+## BIMC read QoS tuning
+
+File: `arch/arm64/boot/dts/samsung/msm8953-bus.dtsi`
+
+The APSS CPU master (`mas_apps_proc`) uses fixed BIMC QoS with `prio-lvl=2` and `prio-rd=2`. The Adreno 506 master (`mas_oxili`) uses `prio-lvl=1` and `prio-rd=1`. This is a deliberate priority split: CPU read traffic gets the highest priority already used by the SoC's TCU master, while GPU reads get an intermediate priority. The device-tree binding documents BIMC read priority values 0, 1, and 2. The BIMC driver copies `prio-lvl` and `prio-rd` into all four BKE health registers and enables BKE in fixed mode.
+
+This tuning affects arbitration when BIMC masters contend. It may reduce CPU/GPU read queuing under mixed workloads, but it cannot increase the physical DDR clock or the memory controller's maximum bandwidth. Lower-priority masters may wait longer under sustained contention, so storage, modem, and mixed-I/O behavior must be included in device testing.
+
+The current `msm_bus_bimc_adhoc.c` fixed-mode path uses `prio-rd` and `prio-lvl`; it does not program `qcom,prio-wr` into the BIMC write-priority field. The write-priority properties remain unchanged and are not claimed as a performance improvement.
+
 ## GPU Adreno 506
 
 The GPU clock OPP table is unchanged. The GPUBW table and matching MSM Bus vectors are capped at index 10, the existing 931.2 MHz DDR / 465.6 MHz BIMC request level. The unsupported index 11 request for 960 MHz has been removed. The 824 MHz GPU OPP now has its bus maximum fixed at index 10, so KGSL cannot select a higher GPUBW entry.
