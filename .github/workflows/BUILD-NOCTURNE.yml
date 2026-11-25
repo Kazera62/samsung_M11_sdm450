@@ -150,7 +150,6 @@ env:
   KERNELSU_BRANCH: "main"
   KERNELSU_METHOD: "shell"
   SUSFS_ENABLE: "${{ inputs.root == 'BakaSU + SUSFS' && 'true' || 'false' }}"
-  SUSFS_VERSION: "2.3.0"
   SUSFS_FIXED: "false"
   # Non-empty selector activates the inline Samsung Linux 4.9 compatibility adjustment.
   SUSFS_PATCH_FIXED: "${{ inputs.root == 'BakaSU + SUSFS' && 'inline_samsung_49_compat' || '' }}"
@@ -201,6 +200,14 @@ jobs:
           ref: mainline
           persist-credentials: false
           fetch-depth: 1
+
+      - name: Record latest build framework revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          framework_commit="$(git rev-parse HEAD)"
+          echo "NON_GKI_FRAMEWORK_COMMIT=$framework_commit" >> "$GITHUB_ENV"
+          echo "Build framework: mainline@$framework_commit"
 
       - name: Tune upstream actions for this kernel
         shell: bash
@@ -815,9 +822,65 @@ jobs:
 
           printf 'AnyKernel3 source: %s (%s)\n' "$AK3_SOURCE" "$AK3_BRANCH"
 
+
+      - name: Prepare latest SUSFS patch metadata and reject handling
+        if: inputs.root == 'BakaSU + SUSFS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          patch_file="/tmp/Patches/Patch/susfs_patch_to_${KERNEL_VERSION}.patch"
+          test -s "$patch_file" || {
+            echo "::error::Latest SUSFS patch is missing: $patch_file"
+            exit 1
+          }
+          susfs_version="$(grep -m1 '^+#define SUSFS_VERSION ' "$patch_file" | cut -d '"' -f 2 | sed 's/^v//')"
+          [[ -n "$susfs_version" ]] || {
+            echo "::error::Cannot detect SUSFS_VERSION from the latest mainline patch."
+            exit 1
+          }
+          echo "SUSFS_VERSION=$susfs_version" >> "$GITHUB_ENV"
+          echo "Using SUSFS version v$susfs_version from mainline."
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          action_path = Path(".github/workflows/patch-susfs/action.yml")
+          action = action_path.read_text()
+          version_pattern = re.compile(r'(?m)^([ \t]*)SUSFS_VERSION="[^"]+"$')
+          action, version_count = version_pattern.subn(
+              r'\1SUSFS_VERSION="${SUSFS_VERSION:?SUSFS_VERSION not detected}"',
+              action,
+          )
+          if version_count != 1:
+              raise SystemExit(f"Expected one upstream SUSFS version assignment, found {version_count}.")
+
+          old_cleanup = r'find . -type f \( -name "*.rej" -o -name "*.orig" \) -delete'
+          if action.count(old_cleanup) != 1:
+              raise SystemExit("Expected one upstream rejected-hunk cleanup command.")
+          action = action.replace(old_cleanup, 'find . -type f -name "*.orig" -delete', 1)
+          action_path.write_text(action)
+          print("SUSFS action now reports the detected patch version and preserves .rej files for validation.")
+          PY
       - name: Apply SUSFS patch for Samsung Linux 4.9
         if: inputs.root == 'BakaSU + SUSFS'
         uses: ./.github/workflows/patch-susfs
+
+      - name: Verify SUSFS version from the applied source
+        if: inputs.root == 'BakaSU + SUSFS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/device_kernel"
+          patch_file="/tmp/Patches/Patch/susfs_patch_to_${KERNEL_VERSION}.patch"
+          source_version="$(grep -m1 '^#define SUSFS_VERSION ' include/linux/susfs.h | cut -d '"' -f 2 | sed 's/^v//')"
+          patch_version="$(grep -m1 '^+#define SUSFS_VERSION ' "$patch_file" | cut -d '"' -f 2 | sed 's/^v//')"
+          if [[ -z "$source_version" || -z "$patch_version" || "$source_version" != "$patch_version" ]]; then
+            echo "::error::SUSFS version mismatch: patch='$patch_version', source='$source_version'."
+            exit 1
+          fi
+          echo "SUSFS_VERSION=$source_version" >> "$GITHUB_ENV"
+          echo "Verified applied SUSFS version: v$source_version"
 
       - name: Fix SUSFS Linux 4.9 allocator and kernel_read compatibility
         if: inputs.root == 'BakaSU + SUSFS'
@@ -1133,10 +1196,68 @@ jobs:
             echo "::error::Manual hooks conflict with SUSFS inline hooks."
             exit 1
           fi
-          if find . -type f -name '*.rej' -print -quit | grep -q .; then
-            echo "::error::Unresolved patch rejected hunks remain in the source tree."
-            exit 1
-          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          import re
+
+          expected_rejects = {
+              "fs/namespace.c.rej": ("#include <linux/susfs_def.h>", "CL_COPY_MNT_NS BIT(25)"),
+              "fs/proc/cmdline.c.rej": ("CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG",),
+              "fs/proc/task_mmu.c.rej": (
+                  "CONFIG_KSU_SUSFS_OPEN_REDIRECT",
+                  "CONFIG_KSU_SUSFS_SUS_MAP",
+                  "CONFIG_KSU_SUSFS_SUS_KSTAT",
+              ),
+              "fs/stat.c.rej": ("CONFIG_KSU_SUSFS_SUS_KSTAT",),
+          }
+          rejects = sorted(p for p in Path(".").rglob("*.rej"))
+          found = {p.as_posix() for p in rejects}
+          unknown = sorted(found - set(expected_rejects))
+          if unknown:
+              raise SystemExit("::error::Unexpected rejected hunks: " + ", ".join(unknown))
+
+          config_path = Path("arch/arm64/configs") / os.environ["DEFCONFIG_NAME"]
+          config_text = config_path.read_text()
+          disabled_features = (
+              "CONFIG_KSU_SUSFS_SUS_KSTAT",
+              "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG",
+              "CONFIG_KSU_SUSFS_OPEN_REDIRECT",
+              "CONFIG_KSU_SUSFS_SUS_MAP",
+          )
+          for symbol in disabled_features:
+              if re.search(r"^" + re.escape(symbol) + r"=y$", config_text, re.MULTILINE):
+                  raise SystemExit(f"::error::{symbol} is enabled; its rejected hunks cannot be ignored.")
+
+          for rejected in rejects:
+              markers = expected_rejects[rejected.as_posix()]
+              rejected_text = rejected.read_text(errors="replace")
+              if rejected.as_posix() == "fs/namespace.c.rej":
+                  if not all(marker in rejected_text for marker in markers):
+                      raise SystemExit(f"::error::Unexpected namespace compatibility reject: {rejected}")
+                  namespace = Path("fs/namespace.c").read_text()
+                  required = (
+                      "#include <linux/susfs_def.h>",
+                      "susfs_is_current_ksu_domain",
+                      "susfs_is_sdcard_android_data_not_decrypted",
+                      "CL_COPY_MNT_NS BIT(25)",
+                  )
+                  missing = [item for item in required if item not in namespace]
+                  if missing:
+                      raise SystemExit("::error::Samsung 4.9 namespace compatibility incomplete: " + ", ".join(missing))
+              elif not any(marker in rejected_text for marker in markers):
+                  raise SystemExit(f"::error::Reject is not tied to a disabled optional feature: {rejected}")
+
+          if rejects:
+              print("Validated known SUSFS rejects for disabled optional features / Samsung 4.9 compatibility:")
+              for rejected in rejects:
+                  print(f"  - {rejected}")
+          else:
+              print("No rejected SUSFS hunks found.")
+          for rejected in rejects:
+              rejected.unlink()
+          Path("rej_files_1.5.5.tar.gz").unlink(missing_ok=True)
+          PY
 
           echo "SUSFS core validated: path/mount hiding enabled; unported optional features disabled."
 
@@ -1787,6 +1908,7 @@ jobs:
             echo "| Kernel release | $kernel_release |"
             echo "| Source branch | $KERNEL_BRANCH |"
             echo "| Source commit | $kernel_commit |"
+            echo "| Build framework | NonGKI_Kernel_Build_2nd@mainline ($NON_GKI_FRAMEWORK_COMMIT) |"
             echo "| Build time | $build_time |"
             echo "| Compiler profile | $CLANG_PROFILE |"
             echo "| Clang | $compiler_version |"
