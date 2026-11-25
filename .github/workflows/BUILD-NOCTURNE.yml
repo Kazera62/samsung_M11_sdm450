@@ -914,6 +914,48 @@ jobs:
       # Current BakaSU adds a standalone preinit runner. On this legacy ARM64
       # kernel, CLANG_FLAGS may not carry the target into that sub-build, causing
       # x86-64 runner.elf.o to be passed to the AArch64 linker.
+      - name: Fix BakaSU preinit headers jobserver handling
+        if: inputs.root != 'Non-root' && env.KERNELSU_AUTO_FORK == 'bakasu'
+        shell: bash
+        run: |
+          set -euo pipefail
+          runner_makefile="$GITHUB_WORKSPACE/device_kernel/${KERNELSU_NAME}/kernel/tools/code_generation/preinit_runner/preinit_runner.mk"
+          test -s "$runner_makefile" || {
+            echo "::error::BakaSU preinit runner Makefile was not found."
+            exit 1
+          }
+          python3 - "$runner_makefile" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          source = path.read_text()
+
+          # Current BakaSU uses -f $(srctree)/Makefile; older revisions
+          # used -C. Match the MAKE invocation prefix to support both.
+          old = '$(shell $(MAKE) -s'
+          new = '$(shell env -u MAKEFLAGS -u MFLAGS $(MAKE) -s -j1'
+
+          if new in source:
+              if source.count(new) != 1:
+                  raise SystemExit("Expected exactly one patched BakaSU headers_install sub-make.")
+              print("BakaSU headers_install already runs serially without inherited jobserver flags.")
+          elif old in source:
+              if source.count(old) != 1:
+                  raise SystemExit("Expected exactly one BakaSU headers_install sub-make.")
+              source = source.replace(old, new, 1)
+              path.write_text(source)
+              print("BakaSU headers_install now runs serially without inherited jobserver flags.")
+          else:
+              raise SystemExit(
+                  "BakaSU preinit runner has an unsupported headers_install command; no edit applied."
+              )
+
+          final_source = path.read_text()
+          if final_source.count(new) != 1:
+              raise SystemExit("BakaSU jobserver compatibility change was not retained.")
+          PY
+
       - name: Fix BakaSU preinit runner target architecture
         if: inputs.root == 'BakaSU without SUSFS' || inputs.root == 'BakaSU + SUSFS'
         shell: bash
