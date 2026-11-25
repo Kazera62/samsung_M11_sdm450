@@ -94,7 +94,7 @@
 			qcom,qport = <0>;
 			qcom,qos-mode = "fixed";
 			qcom,connections = <&slv_ebi &slv_bimc_snoc>;
-			qcom,prio-lvl = <2>; /* CPU read arbitration: high */ 
+			qcom,prio-lvl = <2>; /* CPU read arbitration: high */
 			qcom,prio-rd = <2>;  /* Existing BIMC QoS range: 0-2 */
 			qcom,prio-wr = <0>;  /* Write priority is not applied by this fixed-mode path */
 			qcom,bus-dev = <&fab_bimc>;
