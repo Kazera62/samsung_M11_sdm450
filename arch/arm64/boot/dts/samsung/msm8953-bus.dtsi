@@ -94,9 +94,9 @@
 			qcom,qport = <0>;
 			qcom,qos-mode = "fixed";
 			qcom,connections = <&slv_ebi &slv_bimc_snoc>;
-			qcom,prio-lvl = <0>;
-			qcom,prio-rd = <0>;
-			qcom,prio-wr = <0>;
+			qcom,prio-lvl = <2>; /* CPU read arbitration: high */ 
+			qcom,prio-rd = <2>;  /* Existing BIMC QoS range: 0-2 */
+			qcom,prio-wr = <0>;  /* Write priority is not applied by this fixed-mode path */
 			qcom,bus-dev = <&fab_bimc>;
 			qcom,mas-rpm-id = <ICBID_MASTER_APPSS_PROC>;
 		};
@@ -110,9 +110,9 @@
 			qcom,qport = <2>;
 			qcom,qos-mode = "fixed";
 			qcom,connections = <&slv_ebi &slv_bimc_snoc>;
-			qcom,prio-lvl = <0>;
-			qcom,prio-rd = <0>;
-			qcom,prio-wr = <0>;
+			qcom,prio-lvl = <1>; /* GPU read arbitration: balanced */
+			qcom,prio-rd = <1>;  /* Below CPU, above default-priority masters */
+			qcom,prio-wr = <0>;  /* Write priority is not applied by this fixed-mode path */
 			qcom,bus-dev = <&fab_bimc>;
 			qcom,mas-rpm-id = <ICBID_MASTER_GFX3D>;
 		};
