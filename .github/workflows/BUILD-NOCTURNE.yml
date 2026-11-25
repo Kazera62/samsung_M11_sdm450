@@ -840,15 +840,15 @@ jobs:
           # Linux 4.9 predates kvmalloc(). Add the fallback only when this
           # SUSFS source calls susfs_kvmalloc() but has no local definition.
           if "susfs_kvmalloc(" in source and "static inline void *susfs_kvmalloc" not in source:
-              vmalloc_include = "#include <linux/vmalloc.h>\\n"
+              vmalloc_include = "#include <linux/vmalloc.h>\n"
               if vmalloc_include not in source:
-                  anchor = "#include <linux/string.h>\\n"
+                  anchor = "#include <linux/string.h>\n"
                   if source.count(anchor) != 1:
                       raise SystemExit("::error::Cannot locate SUSFS include anchor for vmalloc compatibility.")
                   source = source.replace(anchor, anchor + vmalloc_include, 1)
 
-              helper_marker = "#ifdef CONFIG_KSU_SUSFS_ENABLE_LOG\\nDEFINE_STATIC_KEY_TRUE(susfs_is_log_enabled);"
-              helper = textwrap.dedent("""\\
+              helper_marker = "#ifdef CONFIG_KSU_SUSFS_ENABLE_LOG\nDEFINE_STATIC_KEY_TRUE(susfs_is_log_enabled);"
+              helper = textwrap.dedent("""\
               /*
                * Linux 4.9 predates kvmalloc(). Keep allocations compatible with
                * kvfree(): try kmalloc first, then fall back to vmalloc.
@@ -880,7 +880,7 @@ jobs:
           # SUSFS 2.x may provide a wrapper already. It is required because
           # Linux 4.9 uses kernel_read(file, offset, buffer, count), while
           # newer/backported kernels use kernel_read(file, buffer, count, pos).
-          read_helper = textwrap.dedent("""\\
+          read_helper = textwrap.dedent("""\
           #ifdef SUSFS_KERNEL_READ_NEW
           static inline int susfs_kernel_read(struct file *fp, void *buf, size_t size, loff_t *pos)
           {
@@ -900,8 +900,8 @@ jobs:
               # Normalize either known direct kernel_read signature through
               # the wrapper. Do not guess on any unrecognized call layout.
               direct_patterns = (
-                  re.compile(r"(?m)^([ \\t]*)ret\\s*=\\s*kernel_read\\(\\s*fp\\s*,\\s*buf\\s*,\\s*size\\s*,\\s*&pos\\s*\\)\\s*;"),
-                  re.compile(r"(?m)^([ \\t]*)ret\\s*=\\s*kernel_read\\(\\s*fp\\s*,\\s*pos\\s*,\\s*(?:\\(char\\s*\\*\\)\\s*)?buf\\s*,\\s*size\\s*\\)\\s*;"),
+                  re.compile(r"(?m)^([ \t]*)ret\s*=\s*kernel_read\(\s*fp\s*,\s*buf\s*,\s*size\s*,\s*&pos\s*\)\s*;"),
+                  re.compile(r"(?m)^([ \t]*)ret\s*=\s*kernel_read\(\s*fp\s*,\s*pos\s*,\s*(?:\(char\s*\*\)\s*)?buf\s*,\s*size\s*\)\s*;"),
               )
               replacements = 0
               for pattern in direct_patterns:
@@ -917,10 +917,10 @@ jobs:
 
               # Keep the API choice tied to the kernel's actual prototype,
               # not only LINUX_VERSION_CODE (some 4.9 trees backport the API).
-              include_anchor = '#include "mount.h"\\n'
+              include_anchor = '#include "mount.h"\n'
               if source.count(include_anchor) != 1:
                   raise SystemExit("::error::Cannot locate SUSFS include anchor for kernel_read wrapper.")
-              source = source.replace(include_anchor, include_anchor + "\\n" + read_helper + "\\n", 1)
+              source = source.replace(include_anchor, include_anchor + "\n" + read_helper + "\n", 1)
               print(f"Wrapped {replacements} SUSFS kernel_read call(s) for old/new API compatibility.")
           else:
               required = (
@@ -946,8 +946,8 @@ jobs:
           makefile = makefile_path.read_text()
           detect_flag = "CFLAGS_susfs.o += -DSUSFS_KERNEL_READ_NEW"
           if detect_flag not in makefile:
-              object_anchor = "obj-$(CONFIG_KSU_SUSFS) += susfs.o\\n"
-              detect_block = textwrap.dedent("""\\
+              object_anchor = "obj-$(CONFIG_KSU_SUSFS) += susfs.o\n"
+              detect_block = textwrap.dedent("""\
               # Detect kernel_read() by prototype: Linux 4.9 normally uses the
               # offset-first form, while vendor trees may backport the newer form.
               ifeq ($(shell grep -q "ssize_t kernel_read" $(srctree)/fs/read_write.c $(srctree)/fs/exec.c 2>/dev/null; echo $$?),0)
@@ -959,7 +959,7 @@ jobs:
               makefile = makefile.replace(object_anchor, object_anchor + detect_block, 1)
               makefile_path.write_text(makefile)
               print("Added kernel_read prototype detection to fs/Makefile.")
-          elif "grep -q \\"ssize_t kernel_read\\"" not in makefile:
+          elif "grep -q \"ssize_t kernel_read\"" not in makefile:
               raise SystemExit("::error::SUSFS kernel_read define exists without prototype-based detection.")
 
           if "susfs_kvmalloc(" in source and "static inline void *susfs_kvmalloc" not in source:
