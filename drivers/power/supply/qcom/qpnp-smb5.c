@@ -2003,7 +2003,9 @@ static int smb5_batt_set_prop(struct power_supply *psy,
 		rc = smblib_set_prop_input_suspend(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED:
-		vote(chg->chg_disable_votable, USER_VOTER, !val->intval, 0);
+		rc = vote(chg->chg_disable_votable, USER_VOTER,
+				!val->intval, 0);
+		power_supply_changed(chg->batt_psy);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
 		rc = smblib_set_prop_system_temp_level(chg, val);

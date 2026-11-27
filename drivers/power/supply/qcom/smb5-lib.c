@@ -2230,6 +2230,34 @@ int smblib_get_prop_batt_status(struct smb_charger *chg,
 	u8 stat;
 	int rc, suspend = 0;
 
+	/*
+	 * Charging disabled by any voter while USB still feeds the system:
+	 * report a stable status, independent of the USBOV debounce, flash
+	 * and AICL/APSD states below. A suspended input keeps the old path.
+	 */
+	if (get_effective_result(chg->chg_disable_votable) > 0) {
+		rc = smblib_get_prop_usb_present(chg, &pval);
+		if (rc < 0) {
+			smblib_err(chg,
+				"Couldn't get usb present prop rc=%d\n", rc);
+			return rc;
+		}
+
+		if (pval.intval) {
+			rc = smblib_get_usb_suspend(chg, &suspend);
+			if (rc < 0) {
+				smblib_err(chg,
+					"Couldn't get usb suspend rc=%d\n", rc);
+				return rc;
+			}
+
+			if (!suspend) {
+				val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
+				return 0;
+			}
+		}
+	}
+
 	/* HS60 add for P191025-06620 Charging popup is coming while camera takes a photo with flash light by gaochao at 2019/11/21 start */
 	#if !defined(HQ_FACTORY_BUILD)	//ss version
 	if (chg->dbc_usbov || chg->flash_active) {
@@ -3691,21 +3719,29 @@ static int smblib_recover_from_soft_jeita(struct smb_charger *chg)
 		((stat1 & BATTERY_CHARGER_STATUS_MASK) == TERMINATE_CHARGE))) {
 		/*
 		 * We are moving from JEITA soft -> Normal and charging
-		 * is terminated
+		 * is terminated. Hold the votable lock so that no vote can
+		 * change between the check and the register toggle.
 		 */
-		rc = smblib_write(chg, CHARGING_ENABLE_CMD_REG, 0);
-		if (rc < 0) {
-			smblib_err(chg, "Couldn't disable charging rc=%d\n",
+		lock_votable(chg->chg_disable_votable);
+		if (get_effective_result_locked(chg->chg_disable_votable) > 0) {
+			smblib_dbg(chg, PR_MISC, "Skip soft JEITA charging enable: chg_disable_votable active\n");
+		} else {
+			rc = smblib_write(chg, CHARGING_ENABLE_CMD_REG, 0);
+			if (rc < 0) {
+				smblib_err(chg, "Couldn't disable charging rc=%d\n",
 						rc);
-			return rc;
-		}
-		rc = smblib_write(chg, CHARGING_ENABLE_CMD_REG,
+				goto unlock;
+			}
+			rc = smblib_write(chg, CHARGING_ENABLE_CMD_REG,
 						CHARGING_ENABLE_CMD_BIT);
-		if (rc < 0) {
-			smblib_err(chg, "Couldn't enable charging rc=%d\n",
+			if (rc < 0)
+				smblib_err(chg, "Couldn't enable charging rc=%d\n",
 						rc);
-			return rc;
 		}
+unlock:
+		unlock_votable(chg->chg_disable_votable);
+		if (rc < 0)
+			return rc;
 	}
 
 	chg->jeita_status = stat7 & BAT_TEMP_STATUS_SOFT_LIMIT_MASK;
