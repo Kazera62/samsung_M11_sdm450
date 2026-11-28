@@ -143,6 +143,16 @@ config FB_MSM_MDSS_FRC_DEBUG
 	statistics and check whether its output pattern matches expected
 	cadence.
 
+config FB_MSM_MDSS_KCAL_CTRL
+	bool "MDSS KCAL color control"
+	depends on FB_MSM_MDSS && !FB_MSM_MDSS_MDP3
+	default n
+	---help---
+	  Expose RGB gain and picture adjustment (saturation, hue, value and
+	  contrast) of the primary display through sysfs at
+	  /sys/devices/platform/kcal_ctrl.0/. The display is left untouched
+	  until userspace writes a value.
+
 config LCD_SORTING
 	bool "LCD SORTING"
 	help

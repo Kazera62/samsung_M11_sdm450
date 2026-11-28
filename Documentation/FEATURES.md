@@ -26,6 +26,36 @@ Enabling this feature breaks the durability guarantee that applications rely on.
 
 Leave it disabled if data integrity matters.
 
+## KCAL color control
+
+- Source: `drivers/video/fbdev/msm/mdss_mdp_kcal_ctrl.c`. Kconfig: `CONFIG_FB_MSM_MDSS_KCAL_CTRL=y`.
+- Based on [savoca/kcal](https://github.com/savoca/kcal) and the Linux 4.4 variant in [PrimoDev23/kernel_xiaomi_whyred](https://github.com/PrimoDev23/kernel_xiaomi_whyred), reworked for MDP v1.7 post-processing.
+- Sysfs directory: `/sys/devices/platform/kcal_ctrl.0/`.
+
+| Node | Values | Default | Effect |
+|---|---|---|---|
+| `kcal` | `R G B`, each 0-256 | `256 256 256` | Channel gain; raised to `kcal_min` if lower |
+| `kcal_min` | 0-256 | 35 | Lower limit for the channel gains |
+| `kcal_enable` | 0 or 1 | 1 | `0` disables the blocks KCAL has configured |
+| `kcal_sat` | 224-383, or 128 | 255 | Global saturation |
+| `kcal_hue` | 0-1536 | 0 | Global hue |
+| `kcal_val` | 128-383 | 255 | Global value |
+| `kcal_cont` | 128-383 | 255 | Global contrast |
+
+```sh
+cd /sys/devices/platform/kcal_ctrl.0
+echo "256 240 220" > kcal
+```
+
+### Behavior
+
+- Nothing is programmed at boot. A color block is touched only after a related node is written, and only the picture adjustment fields that were written are enabled.
+- A change takes effect with the next displayed frame. Writes made before the display pipeline is ready are applied on the next unblank.
+- Settings are not saved across reboots.
+- KCAL shares the PCC and picture adjustment blocks with the ROM (for example night light or display color modes). Whichever writes last wins, and `kcal_enable=0` disables the block rather than restoring the ROM setting.
+- `kcal_invert` is not provided.
+- Value ranges follow the upstream KCAL interface. The visual result of the picture adjustment values has not been verified on this panel.
+
 ## Maple I/O scheduler
 
 - Source: `block/maple-iosched.c`. Kconfig: `CONFIG_IOSCHED_MAPLE=y`.
