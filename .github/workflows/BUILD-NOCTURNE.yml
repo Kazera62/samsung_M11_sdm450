@@ -62,6 +62,7 @@ on:
           - noop
           - deadline
           - cfq
+          - maple
       compression_algorithm:
         description: "zRAM compression algorithm"
         required: true
@@ -655,13 +656,13 @@ jobs:
                     fi
 
                     case "$IO_DEFAULT_SCHEDULER" in
-                      cfq|noop|deadline) io_upper="$(printf '%s' "$IO_DEFAULT_SCHEDULER" | tr '[:lower:]' '[:upper:]')" ;;
+                      cfq|noop|deadline|maple) io_upper="$(printf '%s' "$IO_DEFAULT_SCHEDULER" | tr '[:lower:]' '[:upper:]')" ;;
                       *) echo "::error::Invalid I/O scheduler selection: $IO_DEFAULT_SCHEDULER"; exit 1 ;;
                     esac
                     require_config "CONFIG_IOSCHED_$io_upper=y"
                     require_config "CONFIG_DEFAULT_$io_upper=y"
                     require_config "CONFIG_DEFAULT_IOSCHED=\"$IO_DEFAULT_SCHEDULER\""
-                    io_count="$(grep -Ec '^CONFIG_DEFAULT_(DEADLINE|CFQ|NOOP)=y$' "$config" || true)"
+                    io_count="$(grep -Ec '^CONFIG_DEFAULT_(DEADLINE|CFQ|MAPLE|NOOP)=y$' "$config" || true)"
                     if [[ "$io_count" != "1" ]]; then
                       echo "::error::Expected exactly one default I/O scheduler, found $io_count."
                       exit 1
@@ -1372,6 +1373,7 @@ jobs:
               "cfq": ("CFQ", "cfq"),
               "noop": ("NOOP", "noop"),
               "deadline": ("DEADLINE", "deadline"),
+              "maple": ("MAPLE", "maple"),
           }
           io_value = os.environ.get("IO_DEFAULT_SCHEDULER", "")
           if io_value not in io_map:
@@ -1447,7 +1449,7 @@ jobs:
           )
           lines = replace_choice(
               lines,
-              r"^(?:# )?CONFIG_DEFAULT_(?:DEADLINE|CFQ|NOOP)(?:=.*| is not set)$",
+              r"^(?:# )?CONFIG_DEFAULT_(?:DEADLINE|CFQ|MAPLE|NOOP)(?:=.*| is not set)$",
               [f"CONFIG_DEFAULT_{io_upper}=y"],
           )
           lines = replace_choice(

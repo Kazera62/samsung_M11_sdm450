@@ -14,7 +14,7 @@ Trigger: `workflow_dispatch` only. Select the source branch/ref before starting 
 | `enable_nethunter` | Boolean; default false |
 | `send_zip_to_telegram` | Boolean; default true |
 | `cpu_default_governor` | schedutil (default), performance, ondemand, conservative, userspace, powersave |
-| `io_default_scheduler` | noop (default), deadline, cfq |
+| `io_default_scheduler` | noop (default), deadline, cfq, maple ([details](FEATURES.md#maple-io-scheduler)) |
 | `compression_algorithm` | lz4 (default), lzo, zstd, lz4hc |
 | `tcp_default_congestion` | bbr (default), cubic, westwood, htcp, hybla, veno, vegas, cdg, dctcp, bic, reno |
 | `config_hz` | 100 (default; matches defconfig), 250, 300, 1000 |

@@ -26,6 +26,49 @@ Enabling this feature breaks the durability guarantee that applications rely on.
 
 Leave it disabled if data integrity matters.
 
+## Maple I/O scheduler
+
+- Source: `block/maple-iosched.c`. Kconfig: `CONFIG_IOSCHED_MAPLE=y`.
+- Built in and selectable; the defconfig default stays `noop`. Choose `maple` in the workflow input `io_default_scheduler` to make it the default.
+- Authors: Joe Maples, based on Zen and SIO by Brandon Berhent and Miguel Boton. Ported from [xellDart/Maple-IO-Scheduler](https://github.com/xellDart/Maple-IO-Scheduler), commit `2efe369`.
+
+### Behavior
+
+Four FIFO queues (sync/async, read/write). Reads are preferred until writes have been passed over `writes_starved` times. After `fifo_batch` requests, the oldest expired request is served, reads first. Within the normal path, async requests go before sync requests of the same direction. While fb0 is blanked, expiry times are multiplied by `sleep_latency_multiple` and the write starvation limit becomes 1.
+
+### Use
+
+```sh
+cat /sys/block/mmcblk0/queue/scheduler
+echo maple > /sys/block/mmcblk0/queue/scheduler
+```
+
+ROM init scripts can override the default at boot. Tunables are in `/sys/block/mmcblk0/queue/iosched/` while Maple is active:
+
+| Tunable | Default | Range |
+|---|---|---|
+| `sync_read_expire` (ms) | 100 | 0-60000 |
+| `sync_write_expire` (ms) | 350 | 0-60000 |
+| `async_read_expire` (ms) | 200 | 0-60000 |
+| `async_write_expire` (ms) | 500 | 0-60000 |
+| `fifo_batch` | 16 | 1-1024 |
+| `writes_starved` | 3 | 1-1024 |
+| `sleep_latency_multiple` | 5 | 1-100 |
+
+Expiry values are rounded up to whole ticks (10 ms at `CONFIG_HZ=100`).
+
+### Changes from the imported source
+
+- Display state uses the framebuffer notifier instead of the HiSilicon-specific panel variable.
+- A zero expiry no longer drops the request.
+- An expired sync request is no longer skipped when an older sync and a newer async request are both expired.
+- Neighbor lookup recognizes all four list heads, because merging can move a request between lists.
+- `sleep_latency_multiple` set through sysfs now takes effect.
+- Default expiry values are converted from milliseconds to jiffies, so they match their units at any `CONFIG_HZ`.
+- Sysfs input is validated and bounded; registration errors are returned.
+
+No performance gain has been measured on this device.
+
 ## Zygote CPU-to-DDR bandwidth boost
 
 Files:
