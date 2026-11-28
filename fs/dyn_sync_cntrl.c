@@ -8,8 +8,9 @@
  *     1 = enabled (skip fsync/fdatasync while display is on)
  *
  * Dynamic Fsync is compiled in but disabled by default. When enabled, dirty
- * data is synchronized when the framebuffer blanks, before the display-off
- * transition completes.
+ * data is synchronized after the framebuffer has blanked, before the blank or
+ * release request returns to its caller. Deferral is also suspended while the
+ * system is entering suspend.
  */
 
 #include <linux/init.h>
@@ -22,15 +23,59 @@
 #include <linux/fb.h>
 #include <linux/errno.h>
 #include <linux/reboot.h>
+#include <linux/suspend.h>
 #include <linux/dyn_sync_cntrl.h>
 
 bool dyn_fsync_active = false;
 bool dyn_fsync_screen_on = true;
+bool dyn_fsync_suspending;
 
 static DEFINE_MUTEX(dyn_fsync_mutex);
 static struct kobject *dyn_fsync_kobj;
 static struct notifier_block dyn_fsync_fb_notifier;
 static struct notifier_block dyn_fsync_reboot_notifier;
+static struct notifier_block dyn_fsync_pm_notifier;
+
+/*
+ * Record that the primary display is off and flush once on that transition.
+ * Sleeps; must not be called from a device suspend callback, where writeback
+ * workers are already frozen.
+ */
+void dyn_fsync_screen_off(void)
+{
+	bool was_screen_on;
+
+	mutex_lock(&dyn_fsync_mutex);
+	was_screen_on = READ_ONCE(dyn_fsync_screen_on);
+	WRITE_ONCE(dyn_fsync_screen_on, false);
+
+	/* sync(2) and sync_file_range behavior remains unchanged. */
+	if (was_screen_on && READ_ONCE(dyn_fsync_active))
+		dyn_fsync_sync_all();
+	mutex_unlock(&dyn_fsync_mutex);
+}
+
+/*
+ * PM_SUSPEND_PREPARE runs before the suspend path's filesystem sync. Stop
+ * deferring here so that sync covers everything skipped earlier, including
+ * when the display driver powers off without a framebuffer blank event.
+ */
+static int dyn_fsync_pm_callback(struct notifier_block *nb,
+				 unsigned long action, void *data)
+{
+	switch (action) {
+	case PM_SUSPEND_PREPARE:
+		WRITE_ONCE(dyn_fsync_suspending, true);
+		break;
+	case PM_POST_SUSPEND:
+		WRITE_ONCE(dyn_fsync_suspending, false);
+		break;
+	default:
+		return NOTIFY_DONE;
+	}
+
+	return NOTIFY_OK;
+}
 
 static int dyn_fsync_reboot_callback(struct notifier_block *nb,
 				     unsigned long action, void *data)
@@ -124,7 +169,6 @@ static int dyn_fsync_fb_notifier_callback(struct notifier_block *nb,
 {
 	struct fb_event *event = data;
 	int *blank;
-	bool was_screen_on;
 
 	/*
 	 * Use the successful blank event rather than the early event so a failed
@@ -137,22 +181,13 @@ static int dyn_fsync_fb_notifier_callback(struct notifier_block *nb,
 
 	blank = event->data;
 
-	mutex_lock(&dyn_fsync_mutex);
 	if (*blank == FB_BLANK_UNBLANK) {
+		mutex_lock(&dyn_fsync_mutex);
 		WRITE_ONCE(dyn_fsync_screen_on, true);
+		mutex_unlock(&dyn_fsync_mutex);
 	} else {
-		was_screen_on = READ_ONCE(dyn_fsync_screen_on);
-		WRITE_ONCE(dyn_fsync_screen_on, false);
-
-		/*
-		 * Flush once on the successful transition to screen-off if
-		 * Dynamic Fsync was active. sync(2) and sync_file_range behavior
-		 * remains unchanged.
-		 */
-		if (was_screen_on && READ_ONCE(dyn_fsync_active))
-			dyn_fsync_sync_all();
+		dyn_fsync_screen_off();
 	}
-	mutex_unlock(&dyn_fsync_mutex);
 
 	return NOTIFY_OK;
 }
@@ -174,6 +209,8 @@ static int __init dyn_fsync_init(void)
 	}
 
 	dyn_fsync_fb_notifier.notifier_call = dyn_fsync_fb_notifier_callback;
+	/* Run last so the flush does not delay other blank handlers. */
+	dyn_fsync_fb_notifier.priority = INT_MIN;
 	ret = fb_register_client(&dyn_fsync_fb_notifier);
 	if (ret) {
 		pr_err("dynamic_fsync: failed to register framebuffer notifier: %d\n",
@@ -196,12 +233,26 @@ static int __init dyn_fsync_init(void)
 		return ret;
 	}
 
+	dyn_fsync_pm_notifier.notifier_call = dyn_fsync_pm_callback;
+	ret = register_pm_notifier(&dyn_fsync_pm_notifier);
+	if (ret) {
+		pr_err("dynamic_fsync: failed to register PM notifier: %d\n",
+		       ret);
+		unregister_reboot_notifier(&dyn_fsync_reboot_notifier);
+		fb_unregister_client(&dyn_fsync_fb_notifier);
+		sysfs_remove_group(dyn_fsync_kobj, &dyn_fsync_attr_group);
+		kobject_put(dyn_fsync_kobj);
+		dyn_fsync_kobj = NULL;
+		return ret;
+	}
+
 	pr_info("dynamic_fsync: initialized (runtime default: disabled)\n");
 	return 0;
 }
 
 static void __exit dyn_fsync_exit(void)
 {
+	unregister_pm_notifier(&dyn_fsync_pm_notifier);
 	unregister_reboot_notifier(&dyn_fsync_reboot_notifier);
 	fb_unregister_client(&dyn_fsync_fb_notifier);
 

@@ -5,6 +5,26 @@
 - Kconfig: `CONFIG_DYNAMIC_FSYNC=y`
 - Defconfig: `arch/arm64/configs/a11q_open_defconfig`
 - Runtime control of filesystem sync behavior.
+- Control: `/sys/kernel/dyn_fsync/Dyn_fsync_active` (`0` = normal, default; `1` = enabled). The setting does not persist across reboots.
+
+### Behavior when enabled
+
+- While the primary display (fb0) is on, sync requests that go through `vfs_fsync_range()` return success without writing anything.
+- A full filesystem sync runs when fb0 blanks (including low-power blank modes) or when its last user releases it. It runs synchronously, after the panel is off and, for blank events, after other framebuffer notifiers.
+- Deferral stops from `PM_SUSPEND_PREPARE` until `PM_POST_SUSPEND`, so the suspend path's own filesystem sync covers deferred data.
+- Data is also flushed when the feature is disabled, and on restart, halt or power off.
+- After a release-path power off, deferral stays off until the next framebuffer unblank event.
+
+### Data loss risk
+
+Enabling this feature breaks the durability guarantee that applications rely on.
+
+- Skipped while the display is on: `fsync`, `fdatasync`, `msync(MS_SYNC)`, `O_SYNC`/`O_DSYNC` writes, and in-kernel callers such as loop device flushes.
+- A kernel panic, hang, watchdog reset, forced power-key reset or sudden power loss while the display is on can lose data that applications were told was saved. Databases can be corrupted, and filesystem images on loop devices can be damaged.
+- Errors that `fsync` would have reported are not returned to the caller.
+- The screen-off flush can delay the blank request, and therefore the next screen-on, when much data is dirty or storage is slow.
+
+Leave it disabled if data integrity matters.
 
 ## Zygote CPU-to-DDR bandwidth boost
 

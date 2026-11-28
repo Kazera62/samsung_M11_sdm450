@@ -46,6 +46,7 @@
 #include <linux/file.h>
 #include <linux/kthread.h>
 #include <linux/dma-buf.h>
+#include <linux/dyn_sync_cntrl.h>
 #include "mdss_fb.h"
 #include "mdss_mdp_splash_logo.h"
 #define CREATE_TRACE_POINTS
@@ -2966,6 +2967,10 @@ static int mdss_fb_release_all(struct fb_info *info, bool release_all)
 			mdss_fb_free_fb_ion_memory(mfd);
 
 		atomic_set(&mfd->ioctl_ref_cnt, 0);
+
+		/* This power-off path sends no FB_EVENT_BLANK. */
+		if (mfd->index == 0)
+			dyn_fsync_screen_off();
 	}
 	return ret;
 }

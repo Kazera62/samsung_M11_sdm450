@@ -465,9 +465,11 @@ int vfs_fsync_range(struct file *file, loff_t start, loff_t end, int datasync)
 	/*
 	 * When explicitly enabled, defer fsync/fdatasync while the display is on.
 	 * A full filesystem sync is issued on the screen-off transition.
+	 * Never defer while the system is entering suspend.
 	 */
 	if (READ_ONCE(dyn_fsync_active) &&
-	    READ_ONCE(dyn_fsync_screen_on))
+	    READ_ONCE(dyn_fsync_screen_on) &&
+	    !READ_ONCE(dyn_fsync_suspending))
 		return 0;
 #endif
 	if (!datasync && (inode->i_state & I_DIRTY_TIME)) {
